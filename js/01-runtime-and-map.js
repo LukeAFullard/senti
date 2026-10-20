@@ -92,7 +92,7 @@
 
       for (let i = 0, p = 0; i < imgData.length; i += 4, p++) {
         if (imgData[i + 3] < 40) {
-          indices[p] = 0;
+          indices[p] = 255;
         } else {
           const r = Math.round(imgData[i] * 5 / 255);
           const g = Math.round(imgData[i + 1] * 5 / 255);
@@ -102,9 +102,9 @@
       }
 
       writeByte(0x21); writeByte(0xf9); writeByte(4);
-      writeByte(0x04);
+      writeByte(0x09);
       writeShort(delayCs);
-      writeByte(0);
+      writeByte(255);
       writeByte(0);
 
       writeByte(0x2c);
@@ -693,7 +693,7 @@
       const outerRing = Array.isArray(rings[0]) ? rings[0] : rings;
       probePolygon = outerRing.map(ll => [ll.lng, ll.lat]);
       updateCsvButtonState();
-      log(`Summary polygon drawn (${Math.max(0, probePolygon.length - 1)} edges).`);
+      log(`Summary polygon drawn (${Math.max(0, probePolygon.length)} edges).`);
       updatePolygonStatsPanel(activeRenderedState?.raw || null, activeRenderedState?.inspectGrid || null);
       updateChart();
     }

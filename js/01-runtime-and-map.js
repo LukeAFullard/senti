@@ -414,7 +414,7 @@
               const mad=medianOf(devs,n);
               const delta=target-med;
               const scale=1.4826*mad;
-              if(Number.isFinite(scale)&&scale>1e-7) out[i]=Math.max(-m.maxZ,Math.min(m.maxZ,delta/scale));
+              if(Number.isFinite(scale)&&scale>1e-7) out[i]=delta/scale;
               else out[i]=Math.abs(delta)<=1e-7?0:Math.sign(delta)*m.maxZ;
             }
             self.postMessage({id:m.id,ok:true,result:{indexGrid:out,baselineMedian:medians,support}},[out.buffer,medians.buffer,support.buffer]);

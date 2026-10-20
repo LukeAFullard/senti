@@ -59,15 +59,21 @@
       const epsgMatch = String(raw.refCrs || '').match(/EPSG\s*:\s*(\d+)/i);
       if (!epsgMatch) throw new Error('Could not identify an EPSG code for this grid; GeoTIFF export cancelled to avoid an unreferenced raster.');
       const epsg = Number(epsgMatch[1]);
+      const exportGridClean = new Float32Array(exportGrid.length);
+      for (let i = 0; i < exportGrid.length; i++) {
+        exportGridClean[i] = Number.isNaN(exportGrid[i]) ? -9999 : exportGrid[i];
+      }
+
       const metadata = {
         width: raw.width, height: raw.height,
         ModelPixelScale: [scaleX, scaleY, 0],
         ModelTiepoint: [0, 0, 0, tieX, tieY, 0],
         GTModelTypeGeoKey: epsg === 4326 ? 2 : 1,
         ...(epsg === 4326 ? { GeographicTypeGeoKey: 4326 } : { ProjectedCSTypeGeoKey: epsg }),
+        GDAL_NODATA: '-9999',
         ImageDescription: `${state.isDiff ? 'Change layer' : 'Sentinel-2 analysis'}; mode=${raw.mode || outputMode.value}; date=${raw.dateStr || ''}; ${new Date().toISOString()}`
       };
-      const buffer = await GeoTIFF.writeArrayBuffer(exportGrid, metadata);
+      const buffer = await GeoTIFF.writeArrayBuffer(exportGridClean, metadata);
       const label = state.isDiff ? 'change' : (raw.mode || outputMode.value);
       triggerDownload(new Blob([buffer], { type: 'image/tiff' }), `sentinel_${label}_${String(raw.dateStr || 'analysis').replace(/[^a-z0-9_-]/gi, '_')}.tif`);
       log(`Exported georeferenced ${raw.width}×${raw.height} Float32 GeoTIFF (EPSG:${epsg}). Values are analysis-grid values, not native-resolution pixels.`);
@@ -145,7 +151,7 @@
           { label: 'Dry edge (STR p10)', data: allEdges.map(e => ({ x: e.ndvi, y: e.dry })), showLine: true, borderColor: '#d9822b', backgroundColor: '#d9822b', pointRadius: 4, tension: 0.15 },
           { label: 'Wet edge (STR p90)', data: allEdges.map(e => ({ x: e.ndvi, y: e.wet })), showLine: true, borderColor: '#3689d6', backgroundColor: '#3689d6', pointRadius: 4, tension: 0.15 }
         ] },
-        options: { responsive: true, maintainAspectRatio: false, interaction: { mode: 'nearest', intersect: false }, plugins: { title: { display: true, text: 'OPTRAM feature-space edge fit', color: '#eee' }, legend: { labels: { color: '#ccc' } } }, scales: { x: { type: 'linear', min: -0.1, max: 1, title: { display: true, text: 'NDVI', color: '#aaa' }, ticks: { color: '#aaa' } }, y: { title: { display: true, text: 'Transformed SWIR reflectance (STR)', color: '#aaa' }, ticks: { color: '#aaa' } } } }
+        options: { responsive: true, maintainAspectRatio: false, interaction: { mode: 'nearest', intersect: false }, plugins: { title: { display: true, text: 'OPTRAM feature-space edge fit', color: '#eee' }, legend: { labels: { color: '#ccc' } } }, scales: { x: { type: 'linear', min: 0.05, max: 1, title: { display: true, text: 'NDVI', color: '#aaa' }, ticks: { color: '#aaa' } }, y: { title: { display: true, text: 'Transformed SWIR reflectance (STR)', color: '#aaa' }, ticks: { color: '#aaa' } } } }
       });
       log(`OPTRAM diagnostics shown: ${model.scenesUsed} acquisitions, ${edgeRows.length} usable NDVI bins.`);
     } catch (err) {

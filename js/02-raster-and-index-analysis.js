@@ -354,6 +354,10 @@
         if (!['nir', 'red', 'green'].every(k => Boolean(a[k]?.href))) return false;
         continue;
       }
+      if (mode === 'obs_count') {
+        if (!a.nir?.href || !a.swir16?.href) return false;
+        continue;
+      }
       const def = INDEX_DEFS[mode];
       if (!def || !def.bands.every(k => Boolean(a[k]?.href))) return false;
       if (waterOnlyChk.checked && WATER_QUALITY_PROXY_MODES.has(mode) &&
@@ -389,7 +393,7 @@
       if (!Number.isFinite(denom) || Math.abs(denom) < 1e-6) continue;
       const nv = (n - r) / denom;
       const sv = ((1 - sw) * (1 - sw)) / (2 * sw);
-      if (!Number.isFinite(nv) || nv < -0.1 || nv > 1 || !Number.isFinite(sv)) continue;
+      if (!Number.isFinite(nv) || nv < 0.05 || nv > 1 || !Number.isFinite(sv)) continue;
       ndvi[i] = nv;
       str[i] = sv;
     }
@@ -610,7 +614,7 @@
       }
       rgbChannels = [rCh, gCh, bCh, aCh];
     } else if (mode === 'optram') {
-      const input = await readOptramInputsSingleItem(item, true);
+      const input = await readOptramInputsSingleItem(item, applyCloudMask);
       const model = await ensureOptramCalibration();
       width = input.width; height = input.height;
       refImage = input.refImage; refWindow = input.refWindow; refCrs = input.refCrs;
@@ -711,7 +715,12 @@
 
     const rawObj = {
       id: item.id, dateStr, mode, width, height,
-      refImage, refWindow, refCrs, refOrigin, refRes,
+      refImage: {
+        getOrigin: () => refOrigin.slice(),
+        getResolution: () => refRes.slice(),
+        getWidth: () => width,
+        getHeight: () => height
+      }, refWindow, refCrs, refOrigin, refRes,
       indexGrid, rgbChannels, meanVal,
       sceneCloudPct: getCloudCover(item),
       aoiCloudPct
@@ -781,6 +790,24 @@
     let indexGrid = null;
     let rgbChannels = null;
     const total = width * height;
+
+    const tileTransforms = tileRaws.map(raw => {
+      const tlLonLat = proj4(ref.refCrs, 'EPSG:4326', [refOrigin[0], refOrigin[1]]);
+      const trLonLat = proj4(ref.refCrs, 'EPSG:4326', [refOrigin[0] + width * refRes[0], refOrigin[1]]);
+      const blLonLat = proj4(ref.refCrs, 'EPSG:4326', [refOrigin[0], refOrigin[1] + height * refRes[1]]);
+
+      const tl = proj4('EPSG:4326', raw.refCrs, tlLonLat);
+      const tr = proj4('EPSG:4326', raw.refCrs, trLonLat);
+      const bl = proj4('EPSG:4326', raw.refCrs, blLonLat);
+
+      const dxX = (tr[0] - tl[0]) / width;
+      const dxY = (tr[1] - tl[1]) / width;
+      const dyX = (bl[0] - tl[0]) / height;
+      const dyY = (bl[1] - tl[1]) / height;
+
+      return { raw, tl, dxX, dxY, dyX, dyY };
+    });
+
     if (isRgb) {
       const r = new Uint8ClampedArray(total), g = new Uint8ClampedArray(total);
       const b = new Uint8ClampedArray(total), a = new Uint8ClampedArray(total);
@@ -788,12 +815,11 @@
         if (y > 0 && y % 24 === 0) await new Promise(resolve => setTimeout(resolve, 0));
         for (let x = 0; x < width; x++) {
           const i = y * width + x;
-          const projectedPoint = [refOrigin[0] + (x + 0.5) * refRes[0], refOrigin[1] + (y + 0.5) * refRes[1]];
-          const lonLat = proj4(ref.refCrs, 'EPSG:4326', projectedPoint);
-          for (const raw of tileRaws) {
-            const pt = proj4('EPSG:4326', raw.refCrs, lonLat);
-            const px = (pt[0] - raw.refOrigin[0]) / raw.refRes[0];
-            const py = (pt[1] - raw.refOrigin[1]) / raw.refRes[1];
+          for (const { raw, tl, dxX, dxY, dyX, dyY } of tileTransforms) {
+            const ptX = tl[0] + (x + 0.5) * dxX + (y + 0.5) * dyX;
+            const ptY = tl[1] + (x + 0.5) * dxY + (y + 0.5) * dyY;
+            const px = (ptX - raw.refOrigin[0]) / raw.refRes[0];
+            const py = (ptY - raw.refOrigin[1]) / raw.refRes[1];
             const win = raw.refWindow;
             if (px < win[0] || px >= win[2] || py < win[1] || py >= win[3]) continue;
             const gx = Math.floor(((px - win[0]) / (win[2] - win[0])) * raw.width);
@@ -814,12 +840,11 @@
         if (y > 0 && y % 24 === 0) await new Promise(resolve => setTimeout(resolve, 0));
         for (let x = 0; x < width; x++) {
           const i = y * width + x;
-          const projectedPoint = [refOrigin[0] + (x + 0.5) * refRes[0], refOrigin[1] + (y + 0.5) * refRes[1]];
-          const lonLat = proj4(ref.refCrs, 'EPSG:4326', projectedPoint);
-          for (const raw of tileRaws) {
-            const pt = proj4('EPSG:4326', raw.refCrs, lonLat);
-            const px = (pt[0] - raw.refOrigin[0]) / raw.refRes[0];
-            const py = (pt[1] - raw.refOrigin[1]) / raw.refRes[1];
+          for (const { raw, tl, dxX, dxY, dyX, dyY } of tileTransforms) {
+            const ptX = tl[0] + (x + 0.5) * dxX + (y + 0.5) * dyX;
+            const ptY = tl[1] + (x + 0.5) * dxY + (y + 0.5) * dyY;
+            const px = (ptX - raw.refOrigin[0]) / raw.refRes[0];
+            const py = (ptY - raw.refOrigin[1]) / raw.refRes[1];
             const win = raw.refWindow;
             if (px < win[0] || px >= win[2] || py < win[1] || py >= win[3]) continue;
             const gx = Math.floor(((px - win[0]) / (win[2] - win[0])) * raw.width);

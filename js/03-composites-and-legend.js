@@ -91,11 +91,12 @@
         }
       });
     } else if (tMode === 'seasonal') {
+      const isSouth = drawnBbox && (drawnBbox[1] + drawnBbox[3]) / 2 < 0;
       const seasonDefs = [
-        { key: 'DJF', name: 'Summer (DJF)', months: [11, 0, 1] },
-        { key: 'MAM', name: 'Autumn (MAM)', months: [2, 3, 4] },
-        { key: 'JJA', name: 'Winter (JJA)', months: [5, 6, 7] },
-        { key: 'SON', name: 'Spring (SON)', months: [8, 9, 10] }
+        { key: 'DJF', name: isSouth ? 'Summer (DJF)' : 'Winter (DJF)', months: [11, 0, 1] },
+        { key: 'MAM', name: isSouth ? 'Autumn (MAM)' : 'Spring (MAM)', months: [2, 3, 4] },
+        { key: 'JJA', name: isSouth ? 'Winter (JJA)' : 'Summer (JJA)', months: [5, 6, 7] },
+        { key: 'SON', name: isSouth ? 'Spring (SON)' : 'Autumn (SON)', months: [8, 9, 10] }
       ];
       displaySteps = [];
       for (const sDef of seasonDefs) {

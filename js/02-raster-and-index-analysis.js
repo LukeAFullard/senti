@@ -401,7 +401,12 @@
       id: item.id,
       dateStr: getSceneDateStr(item),
       width: b12.size.width, height: b12.size.height,
-      refImage: b12.image, refWindow: b12.pixelInfo.window, refCrs: b12.crs,
+      refImage: {
+        getOrigin: () => b12.pixelInfo.origin.slice(),
+        getResolution: () => b12.pixelInfo.resolution.slice(),
+        getWidth: () => b12.size.width,
+        getHeight: () => b12.size.height
+      }, refWindow: b12.pixelInfo.window, refCrs: b12.crs,
       refOrigin: b12.pixelInfo.origin, refRes: b12.pixelInfo.resolution,
       pixelInfo: b12.pixelInfo, size: b12.size, crs: b12.crs,
       ndvi, str, sclMask: sclObj.mask, aoiCloudPct: sclObj.aoiCloudPct

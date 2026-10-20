@@ -446,7 +446,7 @@
         }
       }
       const binCount = 12;
-      const ndviMin = -0.1, ndviMax = 1.0;
+      const ndviMin = 0.05, ndviMax = 1.0;
       const binWidth = (ndviMax - ndviMin) / binCount;
       const bins = Array.from({ length: binCount }, () => []);
       let validSamples = 0, inputTiles = 0, scenesUsed = 0;

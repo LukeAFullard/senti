@@ -153,7 +153,7 @@
           const med=medianOf(vals,n); medians[i]=med;
           for(let j=0;j<n;j++)devs[j]=Math.abs(vals[j]-med);
           const scale=1.4826*medianOf(devs,n), delta=target-med;
-          out[i]=Number.isFinite(scale)&&scale>1e-7?Math.max(-maxZ,Math.min(maxZ,delta/scale)):(Math.abs(delta)<=1e-7?0:Math.sign(delta)*maxZ);
+          out[i]=Number.isFinite(scale)&&scale>1e-7?delta/scale:(Math.abs(delta)<=1e-7?0:Math.sign(delta)*maxZ);
           if(i%40000===39999) await new Promise(resolve=>requestAnimationFrame(resolve));
         }
         result={indexGrid:out,baselineMedian:medians,support};
@@ -204,11 +204,16 @@
       const match = String(raw.refCrs || '').match(/EPSG\s*:\s*(\d+)/i);
       if (!match) throw new Error('Could not identify an EPSG code for this grid.');
       const epsg = Number(match[1]);
-      const buffer = await GeoTIFF.writeArrayBuffer(raw.indexGrid, {
+      const exportGridClean = new Float32Array(raw.indexGrid.length);
+      for (let i = 0; i < raw.indexGrid.length; i++) {
+        exportGridClean[i] = Number.isNaN(raw.indexGrid[i]) ? -9999 : raw.indexGrid[i];
+      }
+      const buffer = await GeoTIFF.writeArrayBuffer(exportGridClean, {
         width: raw.width, height: raw.height, ModelPixelScale: [scaleX, scaleY, 0], ModelTiepoint: [0,0,0,tieX,tieY,0],
         GTModelTypeGeoKey: epsg === 4326 ? 2 : 1,
         ...(epsg === 4326 ? { GeographicTypeGeoKey: 4326 } : { ProjectedCSTypeGeoKey: epsg }),
-        ImageDescription: `Sentinel-2 seasonal robust anomaly; index=${result.targetMode}; date=${result.targetDate}; baseline-scenes=${result.referenceCount}; window-days=±${result.windowDays}; min-obs=${result.minObs}; units=robust score 1.4826*MAD; capped ±${result.maxZ}; no independent ground validation; ${new Date().toISOString()}`
+        GDAL_NODATA: '-9999',
+        ImageDescription: `Sentinel-2 seasonal robust anomaly; index=${result.targetMode}; date=${result.targetDate}; baseline-scenes=${result.referenceCount}; window-days=±${result.windowDays}; min-obs=${result.minObs}; units=robust score 1.4826*MAD; display-capped ±${result.maxZ}; no independent ground validation; ${new Date().toISOString()}`
       });
       triggerDownload(new Blob([buffer], {type:'image/tiff'}), `sentinel2_seasonal_anomaly_${result.targetMode}_${result.targetDate}.tif`);
       log('Exported seasonal anomaly GeoTIFF with projection metadata.');

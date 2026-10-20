@@ -1,0 +1,48 @@
+{
+  "name": "satellite-toolkit-first-pass",
+  "entry": "index.html",
+  "script_type": "classic-ordered",
+  "scripts": [
+    {
+      "path": "js/01-runtime-and-map.js",
+      "responsibility": "Runtime, DOM references, shared state, map setup and interaction"
+    },
+    {
+      "path": "js/02-raster-and-index-analysis.js",
+      "responsibility": "Raster access, CRS handling, spectral indices and OPTRAM calculations"
+    },
+    {
+      "path": "js/03-composites-and-legend.js",
+      "responsibility": "Temporal composites, support maps, colour mapping and legend controls"
+    },
+    {
+      "path": "js/04-map-rendering.js",
+      "responsibility": "Basemap stitching and visual rendering helpers"
+    },
+    {
+      "path": "js/05-pixel-inspector.js",
+      "responsibility": "Pixel inspector and hover sampling"
+    },
+    {
+      "path": "js/06-transects-polygon-stats-and-charts.js",
+      "responsibility": "Transect sampling, polygon summaries and charts"
+    },
+    {
+      "path": "js/07-scene-pipeline.js",
+      "responsibility": "STAC scene search, scene loading, analysis pipeline and primary exports"
+    },
+    {
+      "path": "js/08-reports-and-geospatial-exports.js",
+      "responsibility": "Reproducibility report, geospatial exports and OPTRAM diagnostics"
+    },
+    {
+      "path": "js/09-seasonal-anomaly-and-radar-discovery.js",
+      "responsibility": "Seasonal anomaly tools and Sentinel-1 scene discovery/access helpers"
+    },
+    {
+      "path": "js/10-radar-rendering-and-comparison.js",
+      "responsibility": "Radar rendering, optical-radar comparison and radar UI event handlers"
+    }
+  ],
+  "status": "phase-1 extraction; shared global scope remains"
+}

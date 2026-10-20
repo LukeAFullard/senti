@@ -1,0 +1,493 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Browser Sentinel-2: Spectral, Water Quality, Mosaics & Zonal Statistics</title>
+
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.css">
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/proj4js/2.11.0/proj4.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/geotiff@2.1.3/dist-browser/geotiff.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+
+  <style>
+    :root { color-scheme: dark; }
+    * { box-sizing: border-box; }
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      background: #1e1e1e;
+      color: #e0e0e0;
+      max-width: 1280px;
+      margin: 14px auto;
+      padding: 14px;
+      line-height: 1.45;
+    }
+    h1 { color: #4daafc; border-bottom: 1px solid #444; padding-bottom: 8px; margin-top: 0; display: flex; justify-content: space-between; align-items: center; font-size: 21px; }
+    .panel { background: #2d2d2d; padding: 14px; border-radius: 8px; margin-bottom: 14px; border: 1px solid #444; min-width: 0; }
+    #map { height: 450px; width: 100%; border-radius: 6px; margin-top: 8px; border: 1px solid #555; background: #222; }
+    .controls { display: grid; grid-template-columns: repeat(auto-fit, minmax(155px, 1fr)); gap: 10px; margin-top: 12px; align-items: end; }
+    .sub-config { display: none; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin-top: 10px; padding: 10px; background: #232323; border: 1px solid #444; border-radius: 6px; align-items: end; }
+    label { display: block; font-weight: 650; margin-bottom: 4px; font-size: 12px; color: #ccc; }
+    select, input, button { font: inherit; }
+    select, input[type="date"], input[type="number"] {
+      width: 100%; padding: 7px 9px; color: #eee; background: #202020; border: 1px solid #666; border-radius: 5px; font-size: 13px;
+    }
+    input[type="range"] { width: 100%; cursor: pointer; }
+    .checkbox-label { display: flex; align-items: center; gap: 7px; cursor: pointer; font-size: 12.5px; padding: 6px 0; user-select: none; }
+    .checkbox-label input { width: 15px; height: 15px; cursor: pointer; }
+    .btn-row { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
+    button { background: #007acc; color: white; border: none; padding: 9px 14px; border-radius: 5px; cursor: pointer; font-size: 13px; font-weight: 700; flex: 1; transition: background 0.2s; white-space: nowrap; }
+    button:hover { background: #005f9e; }
+    button:disabled { background: #555; cursor: not-allowed; }
+    .btn-secondary { background: #444; flex: 0 0 auto; }
+    .btn-secondary:hover { background: #5a5a5a; }
+    .toolbar-bar { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 12px; background: #222; padding: 8px 12px; border-radius: 6px; margin-top: 8px; border: 1px solid #444; font-size: 12.5px; }
+    .inspector-badge { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; color: #7ce38b; font-weight: 600; }
+    .slider-box { display: none; background: #222; padding: 12px; border-radius: 6px; margin-top: 10px; border: 1px solid #555; }
+    .slider-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; font-size: 13px; font-weight: 600; flex-wrap: wrap; gap: 8px; }
+    .diff-controls { display: flex; align-items: center; gap: 10px; margin-top: 8px; padding-top: 8px; border-top: 1px solid #3a3a3a; font-size: 12.5px; flex-wrap: wrap; }
+    .results-container { display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px; margin-top: 14px; align-items: start; }
+    .canvas-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; align-items: start; }
+    #ndviCanvas { display: none; max-width: 100%; max-height: 580px; width: auto; height: auto; border: 1px solid #444; background: #171717; cursor: crosshair; }
+    .chart-box { background: #222; padding: 12px; border-radius: 6px; border: 1px solid #444; height: 430px; min-height: 350px; position: relative; width: 100%; }
+    .chart-box canvas { width: 100% !important; height: 100% !important; }
+    .legend { display: none; flex-direction: column; justify-content: center; font-size: 12px; background: #252525; padding: 12px; border-radius: 6px; border: 1px solid #444; }
+    .legend-stretch-controls { margin-top: 12px; padding-top: 12px; border-top: 1px solid #4a4a4a; }
+    .legend-stretch-controls label { margin: 8px 0 3px; display: flex; justify-content: space-between; gap: 8px; }
+    .legend-stretch-controls input[type=range] { width: 100%; margin: 2px 0 6px; }
+    .legend-stretch-controls .small-note { white-space: normal; }
+    .legend-item { display: flex; align-items: center; margin: 4px 0; white-space: nowrap; }
+    .color-box { flex: 0 0 14px; width: 14px; height: 14px; margin-right: 8px; border: 1px solid #777; }
+    pre { background: #000; padding: 10px; border-radius: 4px; overflow: auto; max-height: 170px; color: #b8f5b8; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 11.5px; margin: 0; white-space: pre-wrap; }
+    .hint { color: #c3c3c3; margin: 0 0 6px; font-size: 13px; }
+    .small-note { font-size: 11.5px; color: #aaa; margin: 6px 0 0; }
+    dialog { background: #2d2d2d; color: #e0e0e0; border: 1px solid #666; border-radius: 8px; max-width: 760px; width: 94%; padding: 18px; box-shadow: 0 10px 30px rgba(0,0,0,0.6); }
+    dialog::backdrop { background: rgba(0,0,0,0.7); }
+    .help-table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 12.5px; }
+    .help-table th, .help-table td { border: 1px solid #444; padding: 7px; text-align: left; }
+    .help-table th { background: #202020; color: #4daafc; }
+    @media (max-width: 820px) {
+      .results-container { grid-template-columns: minmax(0, 1fr); }
+    }
+  </style>
+</head>
+<body>
+  <h1>
+    <span>Browser Sentinel-2: Spectral, Water Quality, Mosaics & Zonal Statistics</span>
+    <button type="button" class="btn-secondary" id="helpBtn" style="font-size:12px; padding:6px 12px;">? Indices & Tools Help</button>
+  </h1>
+
+  <dialog id="helpModal">
+    <h3 style="margin-top:0; color:#4daafc;">Spectral Indices, Composites & Tools Guide</h3>
+    <table class="help-table">
+      <thead>
+        <tr><th>Mode / Tool</th><th>Formula / Bands</th><th>Primary Use</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><strong>NDVI</strong></td><td>(B08 - B04) / (B08 + B04)</td><td>Green vegetation biomass and crop vigour.</td></tr>
+        <tr><td><strong>NDWI</strong></td><td>(B03 - B08) / (B03 + B08)</td><td>Surface water mapping and flood extent.</td></tr>
+        <tr><td><strong>MNDWI</strong></td><td>(B03 - B11) / (B03 + B11)</td><td>Water mapping; can suppress some built-up and bare-land signals.</td></tr>
+        <tr><td><strong>NDCI</strong></td><td>(B05 - B04) / (B05 + B04)</td><td>Red-edge chlorophyll-a / phytoplankton proxy for suitable water bodies.</td></tr>
+        <tr><td><strong>B05/B04 ratio</strong></td><td>B05 / B04</td><td>Red-edge/red ratio used by some chlorophyll-a algorithms; requires local validation.</td></tr>
+        <tr><td><strong>MCI-like</strong></td><td>B05 - [B04 + (B06 - B04) × 40/75]</td><td>Red-edge spectral line-height proxy for elevated reflectance near 705 nm.</td></tr>
+        <tr><td><strong>FAI</strong></td><td>B08 - [B04 + (B11 - B04) × 177/945]</td><td>Highlights possible surface-floating algae/scum; not a general water-column chlorophyll measure.</td></tr>
+        <tr><td><strong>NDTI</strong></td><td>(B04 - B03) / (B04 + B03)</td><td>Relative turbidity / suspended-sediment screening proxy.</td></tr>
+        <tr><td><strong>Red/green ratio</strong></td><td>B04 / B03</td><td>Relative turbidity / total-suspended-solids proxy; site calibration needed.</td></tr>
+        <tr><td><strong>AWEI<sub>nsh</sub></strong></td><td>4(B03 - B11) - [0.25B08 + 2.75B12]</td><td>Multi-band water extraction index, especially for non-shadow conditions.</td></tr>
+        <tr><td><strong>NDMI</strong></td><td>(B08 - B11) / (B08 + B11)</td><td>Canopy moisture content and drought stress.</td></tr>
+        <tr><td><strong>MSI</strong></td><td>B11 / B08</td><td>Moisture Stress Index; higher values often indicate greater vegetation water stress. Not a direct bare-soil moisture measurement.</td></tr>
+        <tr><td><strong>NMDI</strong></td><td>[B08 - (B11 - B12)] / [B08 + (B11 - B12)]</td><td>Multi-band drought/moisture indicator using NIR and SWIR; compare with local time-series behaviour.</td></tr>
+        <tr><td><strong>NSMI (exploratory)</strong></td><td>(B11 - B12) / (B11 + B12)</td><td>Experimental SWIR-based surface-moisture proxy; not a universal soil-moisture scale.</td></tr>
+        <tr><td><strong>SWIR STR</strong></td><td>(1 - B12)² / (2 × B12)</td><td>Transformed SWIR reflectance component used by OPTRAM. Higher STR is generally associated with wetter surface soil, but needs valid reflectance and appropriate context.</td></tr>
+        <tr><td><strong>OPTRAM (AOI-calibrated)</strong></td><td>Normalised STR between fitted dry/wet edges conditional on NDVI</td><td>Relative surface wetness estimate calibrated from this AOI's multi-date observations. Automatically cloud/shadow-masked and excludes very low-NDVI pixels to reduce water contamination. Values 0–1 are relative, not volumetric water content.</td></tr>
+        <tr><td><strong>SMI</strong></td><td>(B8A - B11) / (B8A + B11)</td><td>Soil Moisture Index using Narrow NIR (B8A) & SWIR16 (B11) to track wet vs. dry ground.</td></tr>
+        <tr><td><strong>S2WI</strong></td><td>(B8A - B11 - B12) / (B8A + B11 + B12)</td><td>Soil Surface Moisture Index combining Narrow NIR and both SWIR bands (B11, B12) for topsoil hydration.</td></tr>
+        <tr><td><strong>NBR</strong></td><td>(B08 - B12) / (B08 + B12)</td><td>Normalized Burn Ratio for burn scar severity & recovery (use Δ mode for dNBR).</td></tr>
+        <tr><td><strong>BSI</strong></td><td>((B11 + B04) - (B08 + B02)) / ((B11 + B04) + (B08 + B02))</td><td>Bare Soil Index for landslide scars, slips, erosion, and exposed earth.</td></tr>
+        <tr><td><strong>NDBI</strong></td><td>(B11 - B08) / (B11 + B08)</td><td>Urban built-up areas and bare soil vs. vegetation.</td></tr>
+        <tr><td><strong>EVI</strong></td><td>2.5*(B08 - B04)/(B08 + 6*B04 - 7.5*B02 + 1)</td><td>High-biomass canopy analysis with atmospheric correction.</td></tr>
+        <tr><td><strong>Current image / Natural RGB / False RGB</strong></td><td>Sentinel visual asset; B04-B03-B02; or B08-B04-B03</td><td>Choose the provider-rendered image, a band-derived true-colour composite, or false colour. Band RGB uses a simple reflectance stretch.</td></tr>
+        <tr><td><strong>Temporal Composites</strong></td><td>Mean, Median, Max, Min, or Custom Percentile</td><td>Merges scenes into a cloud-free overall composite, Monthly average (Jan–Dec), or Seasonal cycle.</td></tr>
+      </tbody>
+    </table>
+    <p class="small-note">Water-quality outputs are screening proxies, not direct concentrations in µg/L chlorophyll-a, NTU, or mg/L suspended solids. Results depend on atmospheric correction, water depth, bottom reflectance, CDOM, sun glint, adjacency effects, and local conditions. Validate against field measurements before quantitative or compliance use. Red-edge bands are 20 m; SWIR-based indices are effectively limited by 20 m input data.</p>
+    <div style="text-align:right; margin-top:14px;">
+      <button type="button" class="btn-secondary" onclick="document.getElementById('helpModal').close()">Close</button>
+    </div>
+  </dialog>
+
+  <div class="panel">
+    <p class="hint">
+      <strong>1.</strong> Draw a <strong>Rectangle</strong> to set your AOI.
+      <strong>2.</strong> Enable <strong>Click-to-Add Points</strong> and click multiple map locations; each gets its own graph line. You can also use the marker tool. A <strong>Polyline</strong> samples a transect, and a <strong>Polygon</strong> calculates zonal summary statistics. Drawing a line or polygon replaces the point selection.
+    </p>
+    <div id="map"></div>
+    <div class="toolbar-bar" style="margin-top:8px;">
+      <div class="inspector-badge" id="pointStatus">Selected comparison points: 0</div>
+      <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+        <span class="small-note" style="margin:0;">Enable click mode and click map locations. Use “Load All for Chart” to populate the full time series.</span>
+        <button id="pointModeBtn" type="button" class="btn-secondary" aria-pressed="false">Enable Click-to-Add Points</button>
+        <button id="clearPointsBtn" type="button" class="btn-secondary" disabled>Clear Points</button>
+      </div>
+    </div>
+
+    <div class="toolbar-bar">
+      <div class="inspector-badge" id="inspectorText">Hover over map or image to inspect pixel values</div>
+      <div style="display:flex; align-items:center; gap:14px; flex-wrap:wrap;">
+        <div style="display:flex; align-items:center; gap:6px;">
+          <label for="transectSamples" style="margin:0;">Transect Samples:</label>
+          <input type="number" id="transectSamples" min="10" max="1000" step="10" value="150" style="width:72px; padding:4px 6px;">
+          <label class="checkbox-label" style="padding:0;" title="Automatically sample every 10 meters along the drawn line">
+            <input type="checkbox" id="auto10mChk" checked> Auto (~10m)
+          </label>
+        </div>
+        <div style="display:flex; align-items:center; gap:6px;">
+          <label for="opacitySlider" style="margin:0;">Overlay Opacity:</label>
+          <input type="range" id="opacitySlider" min="0" max="1" step="0.05" value="0.88" style="width:100px;">
+        </div>
+      </div>
+    </div>
+
+    <div class="controls">
+      <div>
+        <label for="startDate">Start Date</label>
+        <input type="date" id="startDate" value="2023-12-01">
+      </div>
+      <div>
+        <label for="endDate">End Date</label>
+        <input type="date" id="endDate" value="2024-03-01">
+      </div>
+      <div>
+        <label for="maxCloud">Max Scene Cloud: <span id="cloudVal">40</span>%</label>
+        <input type="range" id="maxCloud" min="0" max="100" value="40">
+      </div>
+      <div>
+        <label for="sceneLimit">Max Scenes (date subsampling)</label>
+        <input type="number" id="sceneLimit" min="1" step="1" value="20">
+        <label class="checkbox-label" title="Search every STAC results page and keep every matching acquisition date; no temporal subsampling.">
+          <input type="checkbox" id="allScenesChk"> All matching scenes (unlimited)
+        </label>
+      </div>
+      <div>
+        <label for="outputMode">Primary Mode (Panel 1 & Map)</label>
+        <select id="outputMode">
+          <option value="ndvi">NDVI (Vegetation)</option>
+          <option value="ndwi">NDWI (Surface Water)</option>
+          <option value="ndmi">NDMI (Canopy Moisture)</option>
+          <option value="smi">SMI (Soil Moisture B8A/B11)</option>
+          <option value="s2wi">S2WI (Topsoil Surface Moisture)</option>
+          <option value="nbr">NBR (Burn Scar Severity)</option>
+          <option value="bsi">BSI (Landslide / Bare Soil)</option>
+          <option value="ndbi">NDBI (Built-up / Urban)</option>
+          <option value="evi">EVI (Enhanced Veg)</option>
+          <option value="msi">MSI (Moisture Stress)</option>
+          <option value="nmdi">NMDI (Multi-band Moisture/Drought)</option>
+          <option value="nsmi">NSMI (Exploratory SWIR Moisture)</option>
+          <option value="str">SWIR STR (Transformed Reflectance)</option>
+          <option value="optram">OPTRAM (AOI-calibrated Relative Wetness)</option>
+          <option value="obs_count">Valid Observation Count (clear-sky support)</option>
+          <option value="rgb">Current image (Sentinel visual)</option>
+          <option value="rgb_bands">Natural RGB (B04/B03/B02)</option>
+          <option value="false_color">False-colour NIR</option>
+          <option value="mndwi">MNDWI (Modified Water Index)</option>
+          <option value="ndci">NDCI (Chlorophyll-a Proxy)</option>
+          <option value="chl_ratio">B05/B04 (Chlorophyll Ratio)</option>
+          <option value="mci">MCI-like (Red-edge Peak)</option>
+          <option value="fai">FAI (Floating Algae Proxy)</option>
+          <option value="ndti">NDTI (Turbidity Proxy)</option>
+          <option value="turbidity_ratio">Red/Green Ratio (Turbidity/TSS Proxy)</option>
+          <option value="awei_nsh">AWEI-nsh (Water Extraction)</option>
+        </select>
+      </div>
+      <div>
+        <label for="temporalMode">Temporal View / Composite</label>
+        <select id="temporalMode">
+          <option value="single">Individual Dates (Time-Series)</option>
+          <option value="all">Single Composite (Merge All Dates)</option>
+          <option value="monthly">Monthly Composite (By Calendar Month)</option>
+          <option value="seasonal">Seasonal Composite (DJF / MAM / JJA / SON)</option>
+        </select>
+      </div>
+      <div>
+        <label for="gridLayout">Output Grid Layout</label>
+        <select id="gridLayout">
+          <option value="1x1">Single Panel (1×1)</option>
+          <option value="2x1">Side-by-Side (1×2)</option>
+          <option value="2x2">Quad Grid (2×2)</option>
+        </select>
+      </div>
+      <div>
+        <label class="checkbox-label" title="Reads the Sentinel-2 SCL band to mask clouds, shadows, cirrus and snow/ice inside your rectangle">
+          <input type="checkbox" id="maskCloudsChk" checked> Mask AOI Clouds / Snow (SCL)
+        </label>
+        <label class="checkbox-label" title="For chlorophyll/turbidity proxy modes only, calculate summary values only where MNDWI exceeds the threshold below">
+          <input type="checkbox" id="waterOnlyChk"> Water-only stats (MNDWI mask)
+        </label>
+        <div>
+          <label for="waterMaskThreshold">Water mask: MNDWI &gt;</label>
+          <input type="number" id="waterMaskThreshold" min="-0.5" max="0.5" step="0.05" value="0" style="width:100%;">
+        </div>
+        <label class="checkbox-label" title="Composites the active map basemap underneath exported images and GIFs using the Overlay Opacity slider">
+          <input type="checkbox" id="includeBasemapChk"> Include Basemap in Export
+        </label>
+      </div>
+    </div>
+
+    <div class="sub-config" id="compositeConfigBox">
+      <div>
+        <label for="compositeStat">Aggregation Statistic (Cloud-Free Pixels Only)</label>
+        <select id="compositeStat">
+          <option value="median" selected>Median (50th Percentile — Best Cloudless Baseline)</option>
+          <option value="mean">Mean (Average)</option>
+          <option value="max">Max (Peak Value)</option>
+          <option value="min">Min (Lowest Value)</option>
+          <option value="percentile">Custom Percentile (p%)</option>
+        </select>
+      </div>
+      <div id="percentileBox" style="display:none;">
+        <label for="percentileVal">Percentile (1–99)</label>
+        <input type="number" id="percentileVal" min="1" max="99" value="90">
+      </div>
+    </div>
+
+    <div class="sub-config" id="gridConfigBox">
+      <div>
+        <label for="modePanel2">Panel 2 Mode (Top-Right)</label>
+        <select id="modePanel2">
+          <option value="rgb" selected>Current image (Sentinel visual)</option>
+          <option value="rgb_bands">Natural RGB (B04/B03/B02)</option>
+          <option value="ndvi">NDVI (Vegetation)</option>
+          <option value="ndwi">NDWI (Surface Water)</option>
+          <option value="ndmi">NDMI (Canopy Moisture)</option>
+          <option value="smi">SMI (Soil Moisture B8A/B11)</option>
+          <option value="s2wi">S2WI (Topsoil Surface Moisture)</option>
+          <option value="nbr">NBR (Burn Scar Severity)</option>
+          <option value="bsi">BSI (Landslide / Bare Soil)</option>
+          <option value="ndbi">NDBI (Built-up / Urban)</option>
+          <option value="evi">EVI (Enhanced Veg)</option>
+          <option value="msi">MSI (Moisture Stress)</option>
+          <option value="nmdi">NMDI (Multi-band Moisture/Drought)</option>
+          <option value="nsmi">NSMI (Exploratory SWIR Moisture)</option>
+          <option value="str">SWIR STR (Transformed Reflectance)</option>
+          <option value="optram">OPTRAM (AOI-calibrated Relative Wetness)</option>
+          <option value="false_color">False-colour NIR</option>
+          <option value="mndwi">MNDWI (Modified Water Index)</option>
+          <option value="ndci">NDCI (Chlorophyll-a Proxy)</option>
+          <option value="chl_ratio">B05/B04 (Chlorophyll Ratio)</option>
+          <option value="mci">MCI-like (Red-edge Peak)</option>
+          <option value="fai">FAI (Floating Algae Proxy)</option>
+          <option value="ndti">NDTI (Turbidity Proxy)</option>
+          <option value="turbidity_ratio">Red/Green Ratio (Turbidity/TSS Proxy)</option>
+          <option value="awei_nsh">AWEI-nsh (Water Extraction)</option>
+        </select>
+      </div>
+      <div class="quad-only">
+        <label for="modePanel3">Panel 3 Mode (Bottom-Left)</label>
+        <select id="modePanel3">
+          <option value="smi" selected>SMI (Soil Moisture B8A/B11)</option>
+          <option value="ndvi">NDVI (Vegetation)</option>
+          <option value="ndwi">NDWI (Surface Water)</option>
+          <option value="ndmi">NDMI (Canopy Moisture)</option>
+          <option value="s2wi">S2WI (Topsoil Surface Moisture)</option>
+          <option value="nbr">NBR (Burn Scar Severity)</option>
+          <option value="bsi">BSI (Landslide / Bare Soil)</option>
+          <option value="ndbi">NDBI (Built-up / Urban)</option>
+          <option value="evi">EVI (Enhanced Veg)</option>
+          <option value="msi">MSI (Moisture Stress)</option>
+          <option value="nmdi">NMDI (Multi-band Moisture/Drought)</option>
+          <option value="nsmi">NSMI (Exploratory SWIR Moisture)</option>
+          <option value="str">SWIR STR (Transformed Reflectance)</option>
+          <option value="optram">OPTRAM (AOI-calibrated Relative Wetness)</option>
+          <option value="rgb">Current image (Sentinel visual)</option>
+          <option value="rgb_bands">Natural RGB (B04/B03/B02)</option>
+          <option value="false_color">False-colour NIR</option>
+          <option value="mndwi">MNDWI (Modified Water Index)</option>
+          <option value="ndci">NDCI (Chlorophyll-a Proxy)</option>
+          <option value="chl_ratio">B05/B04 (Chlorophyll Ratio)</option>
+          <option value="mci">MCI-like (Red-edge Peak)</option>
+          <option value="fai">FAI (Floating Algae Proxy)</option>
+          <option value="ndti">NDTI (Turbidity Proxy)</option>
+          <option value="turbidity_ratio">Red/Green Ratio (Turbidity/TSS Proxy)</option>
+          <option value="awei_nsh">AWEI-nsh (Water Extraction)</option>
+        </select>
+      </div>
+      <div class="quad-only">
+        <label for="modePanel4">Panel 4 Mode (Bottom-Right)</label>
+        <select id="modePanel4">
+          <option value="bsi" selected>BSI (Landslide / Bare Soil)</option>
+          <option value="ndvi">NDVI (Vegetation)</option>
+          <option value="ndwi">NDWI (Surface Water)</option>
+          <option value="ndmi">NDMI (Canopy Moisture)</option>
+          <option value="smi">SMI (Soil Moisture B8A/B11)</option>
+          <option value="s2wi">S2WI (Topsoil Surface Moisture)</option>
+          <option value="nbr">NBR (Burn Scar Severity)</option>
+          <option value="ndbi">NDBI (Built-up / Urban)</option>
+          <option value="evi">EVI (Enhanced Veg)</option>
+          <option value="msi">MSI (Moisture Stress)</option>
+          <option value="nmdi">NMDI (Multi-band Moisture/Drought)</option>
+          <option value="nsmi">NSMI (Exploratory SWIR Moisture)</option>
+          <option value="str">SWIR STR (Transformed Reflectance)</option>
+          <option value="optram">OPTRAM (AOI-calibrated Relative Wetness)</option>
+          <option value="rgb">Current image (Sentinel visual)</option>
+          <option value="rgb_bands">Natural RGB (B04/B03/B02)</option>
+          <option value="false_color">False-colour NIR</option>
+          <option value="mndwi">MNDWI (Modified Water Index)</option>
+          <option value="ndci">NDCI (Chlorophyll-a Proxy)</option>
+          <option value="chl_ratio">B05/B04 (Chlorophyll Ratio)</option>
+          <option value="mci">MCI-like (Red-edge Peak)</option>
+          <option value="fai">FAI (Floating Algae Proxy)</option>
+          <option value="ndti">NDTI (Turbidity Proxy)</option>
+          <option value="turbidity_ratio">Red/Green Ratio (Turbidity/TSS Proxy)</option>
+          <option value="awei_nsh">AWEI-nsh (Water Extraction)</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="btn-row">
+      <button id="runBtn" type="button" disabled>Draw a bounding box on the map first</button>
+      <button id="plotAllBtn" type="button" class="btn-secondary" disabled>Load All for Chart</button>
+      <button id="csvBtn" type="button" class="btn-secondary" disabled title="Draw a Marker, Polyline, or Polygon to export point values, transect samples, or polygon summary statistics">Export Point / Transect / Polygon CSV</button>
+      <button id="pngBtn" type="button" class="btn-secondary" disabled>Download PNG</button>
+      <button id="gifBtn" type="button" class="btn-secondary" disabled>Download GIF</button>
+      <button id="geoTiffBtn" type="button" class="btn-secondary" disabled>Export Current Grid GeoTIFF</button>
+      <button id="geoJsonBtn" type="button" class="btn-secondary">Export AOI / Drawings GeoJSON</button>
+      <button id="reportBtn" type="button" class="btn-secondary" disabled>Download Reproducibility Report</button>
+    </div>
+
+    <div class="slider-box" id="sliderBox">
+      <div class="slider-header">
+        <span id="sceneCounter">View 1 / 1</span>
+        <span id="sceneMetaLabel">--</span>
+      </div>
+      <input type="range" id="sceneSlider" min="0" max="0" value="0" step="1">
+
+      <div class="diff-controls" id="diffControls">
+        <label class="checkbox-label" style="padding:0;">
+          <input type="checkbox" id="diffModeChk">
+          <strong>Change Detection (Δ = Current − Baseline):</strong>
+        </label>
+        <select id="baselineSelect" style="width:auto; min-width:160px;" disabled></select>
+        <span class="small-note" style="margin:0;">(Applies to spectral index panels; e.g. ΔNBR = dNBR)</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="results-container">
+    <div class="panel" style="margin-bottom:0;">
+      <h3 id="resultTitle" style="margin-top:0; font-size:15.5px;">Generated Output & Analytics</h3>
+      <div class="canvas-grid">
+        <div>
+          <canvas id="ndviCanvas"></canvas>
+          <p id="resultHint" class="small-note">Draw an AOI and run search to view imagery.</p>
+        </div>
+        <div class="chart-box">
+          <canvas id="timeChart" aria-label="Spectral index time series and spatial comparison chart"></canvas>
+        </div>
+      </div>
+      <div id="polygonStatsPanel" style="display:block; margin-top:12px; padding:10px 12px; background:#222; border:1px solid #444; border-radius:6px;">
+        <strong>Polygon summary statistics</strong>
+        <div id="polygonStatsContent" class="small-note">Draw a polygon on the map after loading imagery to calculate pixel statistics for that area.</div>
+        <p class="small-note">Statistics use valid cell centres inside the polygon on the app’s analysis grid, which is capped at 640 cells per side. Counts are not native-resolution Sentinel-2 pixel totals. Values summarize the selected index (or change layer), not a calibrated concentration unless you fit and validate a local model.</p>
+        <div id="optramPersistenceControls" style="display:none; margin-top:10px; padding-top:10px; border-top:1px solid #444;">
+          <div class="controls" style="margin-top:0; grid-template-columns:minmax(135px,1fr) minmax(190px,2fr);">
+            <div>
+              <label for="optramWetThreshold">Relatively wet threshold (0–1)</label>
+              <input type="number" id="optramWetThreshold" min="0.1" max="0.95" step="0.05" value="0.60">
+            </div>
+            <div style="display:flex; align-items:end;">
+              <button type="button" id="optramPersistenceBtn" class="btn-secondary" disabled>Calculate Wetness Persistence</button>
+            </div>
+          </div>
+          <div id="optramPersistenceContent" class="small-note" aria-live="polite">Choose OPTRAM and draw a polygon to assess relative wetness across the loaded individual acquisitions.</div>
+          <p class="small-note">Persistence is the proportion of currently loaded individual acquisitions when the polygon's mean OPTRAM value meets the selected relative threshold. If Max Scenes subsampling is on, only those sampled acquisitions are assessed. It is not evidence of groundwater level, subsurface drainage, or foundation risk.</p>
+        </div>
+      </div>
+      <details id="optramDiagnostics" style="margin-top:12px; padding:10px 12px; background:#222; border:1px solid #444; border-radius:6px;">
+        <summary style="cursor:pointer; font-weight:700;">OPTRAM calibration diagnostics (internal consistency, not independent validation)</summary>
+        <p class="small-note">The chart shows the empirical dry/wet STR percentiles fitted within the selected AOI and loaded dates. It can reveal a weak or narrow feature-space fit, but without field measurements it cannot establish absolute soil-moisture accuracy.</p>
+        <button id="optramDiagnosticsBtn" type="button" class="btn-secondary">Fit / Refresh OPTRAM Diagnostics</button>
+        <div id="optramDiagnosticsText" class="small-note" aria-live="polite">Select OPTRAM and load at least three acquisitions to inspect the calibration.</div>
+        <div style="height:260px; max-width:900px; margin-top:10px;"><canvas id="optramCalibrationChart"></canvas></div>
+      </details>
+    </div>
+    <div class="legend" id="legend"></div>
+  </div>
+
+  <div class="panel" id="seasonalAnomalyPanel" style="margin-top:14px;">
+    <h3 style="margin-top:0; font-size:15px;">Seasonal Anomaly Detection (Sentinel-2 Only)</h3>
+    <p class="small-note">Compare the selected acquisition with clear observations from other years at a similar time of year. Anomaly scores are robust, internally derived departures from the historical median—not probabilities, ground truth, or direct measurements. Use Individual Dates and a multi-year date range; cloud/shadow/snow masking is always enabled for this analysis.</p>
+    <div class="controls" style="grid-template-columns:repeat(auto-fit,minmax(150px,1fr));">
+      <div><label for="anomalyWindowDays">Season window (± days)</label><input id="anomalyWindowDays" type="number" min="15" max="120" step="5" value="45"></div>
+      <div><label for="anomalyMinObservations">Minimum clear baseline observations / pixel</label><input id="anomalyMinObservations" type="number" min="2" max="12" step="1" value="3"></div>
+      <div><label for="anomalyZLimit">Display limit (robust score ±)</label><input id="anomalyZLimit" type="number" min="1" max="5" step="0.5" value="3"></div>
+      <div style="display:flex;align-items:end;gap:8px;flex-wrap:wrap;"><button id="seasonalAnomalyBtn" type="button" class="btn-secondary" disabled>Calculate Seasonal Anomaly</button><button id="clearAnomalyBtn" type="button" class="btn-secondary" disabled>Clear Anomaly Overlay</button><button id="exportAnomalyBtn" type="button" class="btn-secondary" disabled>Export Anomaly GeoTIFF</button></div>
+    </div>
+    <div id="seasonalAnomalyStatus" class="small-note" aria-live="polite">Load a multi-year Sentinel-2 time series first. The anomaly uses the currently selected numeric index.</div>
+    <div id="seasonalAnomalyLegend" style="display:none;margin-top:10px;">
+      <div style="height:14px;border-radius:4px;border:1px solid #555;background:linear-gradient(90deg,#2155a5,#77b7d8,#d8d8d8,#efa45f,#a51d2d);"></div>
+      <div style="display:flex;justify-content:space-between;font-size:11px;color:#aaa;margin-top:3px;"><span>Unusually low</span><span>Near baseline</span><span>Unusually high</span></div>
+      <div class="small-note">Colours represent robust anomaly scores in units of 1.4826 × median absolute deviation (MAD). Scores are capped for display only.</div>
+    </div>
+  </div>
+
+  <div class="panel" style="margin-top:14px;">
+    <h3 style="margin-top:0; font-size:15px;">Sentinel-1 Radar Explorer</h3>
+    <p class="small-note">Uses the same drawn rectangle and date range as Sentinel-2. Searches the public STAC metadata catalogue for Sentinel-1 RTC items. Raster access depends on the provider: if the asset-signing step returns HTTP 401/403, the item is discoverable but not readable by this no-login HTML app. Global Sentinel-1 GRD is also indexed publicly, but those source assets are requester-pays and are not a valid substitute for calibrated/terrain-corrected backscatter in this browser-only workflow. Radar backscatter is not a direct soil-moisture measurement and responds to vegetation, roughness, incidence angle, orbit and geometry.</p>
+    <div class="controls" style="grid-template-columns:repeat(auto-fit,minmax(180px,1fr));">
+      <div><label for="radarMode">Radar display</label><select id="radarMode"><option value="vv_db">Co-polarised backscatter (VV, or HH) — dB</option><option value="vh_db">Cross-polarised backscatter (VH, or HV) — dB</option><option value="pol_diff">Co-pol minus cross-pol — dB difference</option></select></div>
+      <div><label for="radarSceneSelect">Current radar acquisition</label><select id="radarSceneSelect" disabled><option value="">Search for RTC scenes first</option></select></div>
+      <div><label for="radarBaselineSelect">Radar baseline acquisition</label><select id="radarBaselineSelect" disabled><option value="">Search for at least two scenes</option></select></div>
+      <div style="display:flex;align-items:end;gap:8px;flex-wrap:wrap;"><button id="radarSearchBtn" type="button" class="btn-secondary">Search Sentinel-1 RTC</button><button id="radarRenderBtn" type="button" class="btn-secondary" disabled>Load / Update Radar Map</button><button id="radarClearBtn" type="button" class="btn-secondary" disabled>Clear Radar Overlay</button></div>
+    </div>
+    <div style="display:flex;gap:10px;align-items:end;flex-wrap:wrap;margin-top:10px;">
+      <div style="min-width:160px;"><label for="opticalDeltaThreshold">Optical change threshold (index units)</label><input id="opticalDeltaThreshold" type="number" min="0" step="0.005" value="0.02" style="width:100%;"></div>
+      <div style="min-width:160px;"><label for="radarDeltaThreshold">Radar change threshold (dB)</label><input id="radarDeltaThreshold" type="number" min="0" step="0.5" value="1.5" style="width:100%;"></div>
+      <button id="radarCompareBtn" type="button" class="btn-secondary" disabled>Compare Optical + Radar Changes</button>
+      <button id="radarCompareClearBtn" type="button" class="btn-secondary" disabled>Clear Comparison</button>
+    </div>
+    <details style="margin-top:10px;">
+      <summary style="cursor:pointer;font-weight:650;">Fallback: load downloaded Sentinel-1 RTC GeoTIFFs locally</summary>
+      <p class="small-note">Use this when remote RTC assets are not accessible without an account. Choose radiometrically calibrated, terrain-corrected Sentinel-1 RTC COGs (such as Gamma0/Sigma0), not raw GRD digital numbers. Files are read locally in this browser and are not uploaded.</p>
+      <div class="controls" style="grid-template-columns:repeat(auto-fit,minmax(190px,1fr));">
+        <div><label for="radarLocalCurrentCo">Current co-pol RTC GeoTIFF (VV/HH)</label><input id="radarLocalCurrentCo" type="file" accept=".tif,.tiff,image/tiff"></div>
+        <div><label for="radarLocalCurrentCross">Current cross-pol GeoTIFF (VH/HV, optional)</label><input id="radarLocalCurrentCross" type="file" accept=".tif,.tiff,image/tiff"></div>
+        <div><label for="radarLocalCurrentDate">Current acquisition date</label><input id="radarLocalCurrentDate" type="date" value="2024-01-01"></div>
+        <div><label for="radarLocalBaseCo">Baseline co-pol RTC GeoTIFF (VV/HH)</label><input id="radarLocalBaseCo" type="file" accept=".tif,.tiff,image/tiff"></div>
+        <div><label for="radarLocalBaseCross">Baseline cross-pol GeoTIFF (VH/HV, optional)</label><input id="radarLocalBaseCross" type="file" accept=".tif,.tiff,image/tiff"></div>
+        <div><label for="radarLocalBaseDate">Baseline acquisition date</label><input id="radarLocalBaseDate" type="date" value="2023-01-01"></div>
+        <div><label for="radarLocalEncoding">Raster value encoding</label><select id="radarLocalEncoding"><option value="linear" selected>Linear calibrated backscatter (convert to dB)</option><option value="db">Already in dB</option></select></div>
+      </div>
+      <button id="radarLoadLocalBtn" type="button" class="btn-secondary" style="margin-top:8px;">Load Local RTC Current + Baseline</button>
+      <div id="radarLocalStatus" class="small-note" aria-live="polite">No local radar files loaded.</div>
+    </details>
+    <div id="radarCompareStatus" class="small-note" aria-live="polite">For spatial change comparison, enable optical Change Detection, select its baseline, then choose current and baseline radar acquisitions.</div>
+    <div id="radarCompareLegend" style="display:none;margin-top:8px;font-size:12px;">
+      <span style="display:inline-block;background:#239b71;width:12px;height:12px;border-radius:2px;margin-right:4px;"></span>Both changes positive&nbsp;&nbsp;
+      <span style="display:inline-block;background:#2878cf;width:12px;height:12px;border-radius:2px;margin-right:4px;"></span>Both changes negative&nbsp;&nbsp;
+      <span style="display:inline-block;background:#bd49b6;width:12px;height:12px;border-radius:2px;margin-right:4px;"></span>Opposite directions&nbsp;&nbsp;
+      <span style="display:inline-block;background:#858585;width:12px;height:12px;border-radius:2px;margin-right:4px;"></span>Below threshold / NoData
+      <div class="small-note">Directional agreement only. The two sensors respond to different surface properties; agreement is not validation or proof of a common physical cause.</div>
+    </div>
+  </div>
+
+  <div class="panel" style="margin-top:14px;">
+    <h3 style="margin-top:0; font-size:15px;">Execution log</h3>
+    <pre id="logOutput">Ready. Draw a rectangle on the map to begin.</pre>
+  </div>
+
+  <script src="./js/01-runtime-and-map.js"></script>
+  <script src="./js/02-raster-and-index-analysis.js"></script>
+  <script src="./js/03-composites-and-legend.js"></script>
+  <script src="./js/04-map-rendering.js"></script>
+  <script src="./js/05-pixel-inspector.js"></script>
+  <script src="./js/06-transects-polygon-stats-and-charts.js"></script>
+  <script src="./js/07-scene-pipeline.js"></script>
+  <script src="./js/08-reports-and-geospatial-exports.js"></script>
+  <script src="./js/09-seasonal-anomaly-and-radar-discovery.js"></script>
+  <script src="./js/10-radar-rendering-and-comparison.js"></script>
+</body>
+</html>

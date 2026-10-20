@@ -143,7 +143,12 @@
     }
     const raw = {
       id: item.id, dateStr: getSceneDateStr(item), width: co.size.width, height: co.size.height,
-      refImage: co.image, refWindow: co.pixelInfo.window, refCrs: co.crs,
+      refImage: {
+        getOrigin: () => co.pixelInfo.origin.slice(),
+        getResolution: () => co.pixelInfo.resolution.slice(),
+        getWidth: () => co.size.width,
+        getHeight: () => co.size.height
+      }, refWindow: co.pixelInfo.window, refCrs: co.crs,
       refOrigin: co.pixelInfo.origin, refRes: co.pixelInfo.resolution, pixelInfo: co.pixelInfo,
       coDb: dCo, crossDb: dCross, coKey, crossKey, scaleUsed: co.scaleUsed,
       properties: item.properties || {}, asset: a[coKey]
@@ -181,7 +186,12 @@
     const cross=cfg.crossFile ? await readLocalRadarCogs(cfg.crossFile,drawnBbox,{crs:co.crs,pixelInfo:co.pixelInfo,size:co.size},cfg.encoding) : null;
     const raw={
       id:item.id,dateStr:getSceneDateStr(item),width:co.size.width,height:co.size.height,
-      refImage:co.image,refWindow:co.pixelInfo.window,refCrs:co.crs,
+      refImage:{
+        getOrigin: () => co.pixelInfo.origin.slice(),
+        getResolution: () => co.pixelInfo.resolution.slice(),
+        getWidth: () => co.size.width,
+        getHeight: () => co.size.height
+      },refWindow:co.pixelInfo.window,refCrs:co.crs,
       refOrigin:co.pixelInfo.origin,refRes:co.pixelInfo.resolution,pixelInfo:co.pixelInfo,
       coDb:co.values,crossDb:cross?cross.values:null,coKey:cfg.coLabel||'VV/HH',crossKey:cross?(cfg.crossLabel||'VH/HV'):null,
       scaleUsed:cfg.encoding==='linear'?'linear calibrated backscatter → 10·log10(value)':'already dB; no scaling',
@@ -194,7 +204,7 @@
   function populateRadarSceneControls(selectedCurrent=null, selectedBaseline=null) {
     const fill=(select, emptyLabel)=>{
       select.innerHTML='';
-      if(!radarScenes.length){select.innerHTML=`<option value="">${escapeHtml(emptyLabel)}</option>`;select.disabled=true;return;}
+      if(!radarScenes.length){select.innerHTML=`<option value="">${escapeHtml(emptyLabel)}</option>`;return;}
       for(const item of radarScenes){
         const option=document.createElement('option'); option.value=item.id;
         const p=item.properties||{};
@@ -203,10 +213,11 @@
         option.textContent=`${getSceneDateStr(item)} | ${pols||'SAR'} | ${p['sat:orbit_state']||source} | ${item.id}`;
         select.appendChild(option);
       }
-      select.disabled=radarScenes.length<2;
     };
     fill(radarSceneSelect,'Search for or load radar scenes first');
     fill(radarBaselineSelect,'At least two radar scenes required');
+    radarSceneSelect.disabled = radarScenes.length === 0;
+    radarBaselineSelect.disabled = radarScenes.length < 2;
     if(radarScenes.length){
       radarSceneSelect.value=selectedCurrent||radarScenes[radarScenes.length-1].id;
       radarBaselineSelect.value=selectedBaseline||radarScenes[0].id;

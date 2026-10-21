@@ -119,6 +119,7 @@
   async function runPipeline() {
     if (!drawnBbox) return;
     resetResults();
+    const startGeneration = pipelineGeneration;
 
     const modes = getActiveModes();
     const start = startDateInput.value || '2023-12-01';
@@ -134,6 +135,7 @@
 
     try {
       // Split wide date ranges into <=180-day chunks to prevent STAC 502/504 Gateway Timeouts
+      const t0Search = performance.now();
       const startMs = new Date(`${start}T00:00:00Z`).getTime();
       const endMs = new Date(`${end}T23:59:59Z`).getTime();
       if (!(endMs >= startMs)) throw new Error('End Date must be on or after Start Date.');
@@ -149,6 +151,7 @@
       const allFeatures = [];
 
       for (let i = 0; i < chunks.length; i++) {
+        if (startGeneration !== pipelineGeneration) return;
         if (chunks.length > 1) {
           log(`Querying time window ${i + 1}/${chunks.length} (${chunks[i].substring(0, 10)} to ${chunks[i].substring(21, 31)})...`);
         }
@@ -168,6 +171,7 @@
           const chunkItems = await fetchStacChunk(requestBody, (page, total, pageItems) => {
             if (page === 1 || page % 5 === 0) log(`Window ${i + 1}: STAC page ${page}; ${total} unique item(s) retrieved so far.`);
           });
+          if (startGeneration !== pipelineGeneration) return;
           allFeatures.push(...chunkItems);
           log(`Retrieved ${chunkItems.length} unique STAC item(s) for window ${i + 1} across all pages.`);
         } catch (err) {
@@ -217,6 +221,9 @@
         log(`Loaded all ${validScenes.length} matching acquisition(s)${allScenesChk.checked ? ' (unlimited mode)' : ''}.`);
       }
 
+      const t1Search = performance.now();
+      log(`[Timing] STAC search and grouping completed in ${((t1Search - t0Search) / 1000).toFixed(2)}s`);
+
       sliderBox.style.display = 'block';
       rebuildDisplaySteps();
       seasonalAnomalyBtn.disabled = validScenes.length < 2;
@@ -226,9 +233,12 @@
       updateCsvButtonState();
       updateOptramPersistenceUI();
 
+      const t2Render = performance.now();
       await displayStepByIndex(displaySteps.length - 1);
+      const t3Render = performance.now();
+      log(`[Timing] Initial scene rendering completed in ${((t3Render - t2Render) / 1000).toFixed(2)}s`);
     } catch (error) {
-      log('ERROR: ' + error.message);
+      if (error.message !== 'Pipeline cancelled') log('ERROR: ' + error.message);
     } finally {
       runBtn.disabled = !drawnBbox;
       runBtn.textContent = 'Search & Render Scenes';
@@ -263,18 +273,20 @@
 
   plotAllBtn.addEventListener('click', async () => {
     if (displaySteps.length === 0) return;
+    const startGeneration = pipelineGeneration;
     plotAllBtn.disabled = true;
     const mode = outputMode.value;
     const maskClouds = maskCloudsChk.checked;
     try {
       for (let i = 0; i < displaySteps.length; i++) {
+        if (startGeneration !== pipelineGeneration) break;
         plotAllBtn.textContent = `Loading ${i + 1}/${displaySteps.length}…`;
         await computeStepRaw(i, mode, maskClouds);
         updateChart();
       }
-      log('All views loaded into chart.');
+      if (startGeneration === pipelineGeneration) log('All views loaded into chart.');
     } catch (err) {
-      log('Batch load error: ' + err.message);
+      if (err.message !== 'Pipeline cancelled') log('Batch load error: ' + err.message);
     } finally {
       plotAllBtn.disabled = false;
       plotAllBtn.textContent = 'Load All for Chart';
@@ -292,26 +304,30 @@
 
   gifBtn.addEventListener('click', async () => {
     if (displaySteps.length < 2) return;
+    const startGeneration = pipelineGeneration;
     gifBtn.disabled = true;
     const canvases = [];
     try {
       for (let i = 0; i < displaySteps.length; i++) {
+        if (startGeneration !== pipelineGeneration) break;
         gifBtn.textContent = `Rendering ${i + 1}/${displaySteps.length}…`;
         log(`Rendering GIF frame ${i + 1} / ${displaySteps.length}...`);
         const res = await renderVisualForStep(i);
         canvases.push(res.canvas);
       }
-      gifBtn.textContent = 'Encoding GIF…';
-      const blob = encodeAnimatedGIF(canvases, 80);
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `sentinel2_${gridLayout.value}_${temporalMode.value}_${startDateInput.value}_to_${endDateInput.value}.gif`;
-      a.click();
-      setTimeout(() => URL.revokeObjectURL(url), 5000);
-      log('GIF downloaded successfully.');
+      if (startGeneration === pipelineGeneration) {
+        gifBtn.textContent = 'Encoding GIF…';
+        const blob = encodeAnimatedGIF(canvases, 80);
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `sentinel2_${gridLayout.value}_${temporalMode.value}_${startDateInput.value}_to_${endDateInput.value}.gif`;
+        a.click();
+        setTimeout(() => URL.revokeObjectURL(url), 5000);
+        log('GIF downloaded successfully.');
+      }
     } catch (err) {
-      log('GIF failed: ' + err.message);
+      if (err.message !== 'Pipeline cancelled') log('GIF failed: ' + err.message);
     } finally {
       gifBtn.disabled = false;
       gifBtn.textContent = 'Download GIF';

@@ -23,13 +23,59 @@
       for (let i = 0; i < count; i++) if (validVals[i] < m) m = validVals[i];
       return m;
     }
+    // Quickselect algorithm to find kth element (0-indexed)
+    function quickSelect(arr, left, right, k) {
+      while (left < right) {
+        const pivotIndex = left + Math.floor(Math.random() * (right - left + 1));
+        const pivotValue = arr[pivotIndex];
+        arr[pivotIndex] = arr[right];
+        arr[right] = pivotValue;
+
+        let storeIndex = left;
+        for (let i = left; i < right; i++) {
+          if (arr[i] < pivotValue) {
+            const temp = arr[i];
+            arr[i] = arr[storeIndex];
+            arr[storeIndex] = temp;
+            storeIndex++;
+          }
+        }
+        arr[right] = arr[storeIndex];
+        arr[storeIndex] = pivotValue;
+
+        if (k === storeIndex) {
+          return arr[k];
+        } else if (k < storeIndex) {
+          right = storeIndex - 1;
+        } else {
+          left = storeIndex + 1;
+        }
+      }
+      return arr[k];
+    }
+
     const sub = validVals.subarray(0, count);
-    sub.sort();
     const q = stat === 'median' ? 0.5 : Math.max(0.01, Math.min(0.99, pVal / 100));
     const pos = (count - 1) * q;
     const base = Math.floor(pos);
     const rest = pos - base;
-    return base + 1 < count ? sub[base] + rest * (sub[base + 1] - sub[base]) : sub[base];
+
+    const val1 = quickSelect(sub, 0, count - 1, base);
+
+    // For fractional percentiles, we need the next largest element too
+    if (rest > 0 && base + 1 < count) {
+      // Find the minimum value in the rest of the array (elements > val1)
+      // Since quickSelect partially sorted the array, elements > val1 are at indices > base
+      let val2 = Infinity;
+      for (let i = base + 1; i < count; i++) {
+        if (sub[i] < val2) {
+          val2 = sub[i];
+        }
+      }
+      return val1 + rest * (val2 - val1);
+    }
+
+    return val1;
   }
 
   function getStatShortLabel() {
@@ -126,6 +172,7 @@
   }
 
   async function computeDataSupportRaw() {
+    const startGeneration = pipelineGeneration;
     const signature = `${validScenes.map(sc => sc.id).join('|')}|SCL-clear`;
     if (dataSupportCache.has(signature)) return dataSupportCache.get(signature);
     if (!validScenes.length) throw new Error('Load Sentinel-2 scenes before calculating observation support.');
@@ -135,6 +182,7 @@
       if ((index + 1) % 4 === 0) log(`Observation support: loaded ${index + 1}/${validScenes.length} acquisitions...`);
       return raw;
     });
+    if (startGeneration !== pipelineGeneration) throw new Error('Pipeline cancelled');
     const ref = raws[0], width = ref.width, height = ref.height;
     const indexGrid = new Float32Array(width * height);
     const sameGeometry = raws.map(raw => gridsShareGeometry(ref, raw));
@@ -173,6 +221,7 @@
   }
 
   async function computeStepRaw(stepIndex, mode, applyCloudMask) {
+    const startGeneration = pipelineGeneration;
     const step = displaySteps[stepIndex];
     if (mode === 'obs_count') return computeDataSupportRaw();
     if (!step.isComposite && step.scenes.length === 1) {
@@ -196,6 +245,8 @@
       log(`Loaded ${completedScenes}/${step.scenes.length} scenes for ${step.label}...`);
       return result;
     });
+
+    if (startGeneration !== pipelineGeneration) throw new Error('Pipeline cancelled');
 
     const ref = raws[0];
     const width = ref.width, height = ref.height;
@@ -668,13 +719,13 @@
       ensureLegendStretch(mode, activeRenderedState?.raw?.indexGrid);
       legend.innerHTML = `<strong>${mode.toUpperCase()} Colour Scale</strong>` +
         customLegendMarkup(mode) +
-        (proxyModes.includes(mode) ? '<p class="small-note">Relative screening scale only; thresholds are not universal and must not be interpreted as concentration units.</p>' : '') +
+        (proxyModes.includes(mode) ? '<p class="small-note">Warning: Spectral proxy only. Thresholds are relative and do not reflect ground-validated chlorophyll-a or turbidity concentrations.</p>' : '') +
         (waterOnlyChk.checked && WATER_QUALITY_PROXY_MODES.has(mode) ? '<p class="small-note">Water-only filter active: MNDWI must exceed ' + waterMaskThresholdInput.value + '.</p>' : '') +
         updateLegendStretchUI(mode, isDiff);
     } else {
       legend.innerHTML = `<strong>${mode.toUpperCase()} Scale</strong>` +
         scales[mode].map(([col, lbl]) => `<div class="legend-item"><div class="color-box" style="background:${col};"></div>${lbl}</div>`).join('') +
-        (proxyModes.includes(mode) ? '<p class="small-note">Relative screening scale only; thresholds are not universal and must not be interpreted as concentration units.</p>' : '') +
+        (proxyModes.includes(mode) ? '<p class="small-note">Warning: Spectral proxy only. Thresholds are relative and do not reflect ground-validated chlorophyll-a or turbidity concentrations.</p>' : '') +
         (waterOnlyChk.checked && WATER_QUALITY_PROXY_MODES.has(mode) ? '<p class="small-note">Water-only filter active: MNDWI must exceed ' + waterMaskThresholdInput.value + '.</p>' : '');
     }
     legend.style.display = 'flex';

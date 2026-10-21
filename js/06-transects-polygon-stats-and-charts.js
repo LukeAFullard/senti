@@ -228,10 +228,10 @@
       const isRgbMode = mode === 'rgb' || mode === 'rgb_bands' || mode === 'false_color';
       if (probePolygon && isRgbMode) throw new Error('Choose a spectral index before exporting polygon summary statistics.');
       const rows = probePolygon
-        ? ['step_label,mode,valid_cells,mean,median,standard_deviation,min,p25,p75,max']
+        ? ['step_label,date_str,mode,valid_cells,mean,median,standard_deviation,min,p25,p75,max,scene_cloud_pct,aoi_cloud_pct']
         : [isRgbMode
-          ? 'step_label,point_id,sample_index,distance_m,longitude,latitude,mode,value,red,green,blue'
-          : 'step_label,point_id,sample_index,distance_m,longitude,latitude,mode,value'];
+          ? 'step_label,date_str,point_id,sample_index,distance_m,longitude,latitude,mode,value,red,green,blue,scene_cloud_pct,aoi_cloud_pct'
+          : 'step_label,date_str,point_id,sample_index,distance_m,longitude,latitude,mode,value,scene_cloud_pct,aoi_cloud_pct'];
       const csvCell = value => {
         const str = String(value ?? '');
         return /[",\n\r]/.test(str) ? '"' + str.replace(/"/g, '""') + '"' : str;
@@ -279,19 +279,25 @@
           }
           const stats = summarizePolygon(raw, polygonGrid, probePolygon);
           const f = value => Number.isFinite(value) ? value.toFixed(6) : '';
-          rows.push([stepLabel, polygonMode, stats?.count ?? 0, f(stats?.mean), f(stats?.median), f(stats?.sd), f(stats?.min), f(stats?.p25), f(stats?.p75), f(stats?.max)].join(','));
+          const scC = Number.isFinite(raw.sceneCloudPct) ? raw.sceneCloudPct.toFixed(2) : '';
+          const aoiC = Number.isFinite(raw.aoiCloudPct) ? raw.aoiCloudPct.toFixed(2) : '';
+          rows.push([stepLabel, csvCell(raw.dateStr), polygonMode, stats?.count ?? 0, f(stats?.mean), f(stats?.median), f(stats?.sd), f(stats?.min), f(stats?.p25), f(stats?.p75), f(stats?.max), scC, aoiC].join(','));
           continue;
         }
         if (geom) {
+          const scC = Number.isFinite(raw.sceneCloudPct) ? raw.sceneCloudPct.toFixed(2) : '';
+          const aoiC = Number.isFinite(raw.aoiCloudPct) ? raw.aoiCloudPct.toFixed(2) : '';
           for (const pt of geom.points) {
             const vals = valueCells(raw, pt.lon, pt.lat);
-            rows.push([stepLabel, '', pt.index, pt.distanceM.toFixed(2), pt.lon.toFixed(6), pt.lat.toFixed(6), mode.toUpperCase(), ...vals].join(','));
+            rows.push([stepLabel, csvCell(raw.dateStr), '', pt.index, pt.distanceM.toFixed(2), pt.lon.toFixed(6), pt.lat.toFixed(6), mode.toUpperCase(), ...vals, scC, aoiC].join(','));
           }
         } else if (probePoints.length) {
+          const scC = Number.isFinite(raw.sceneCloudPct) ? raw.sceneCloudPct.toFixed(2) : '';
+          const aoiC = Number.isFinite(raw.aoiCloudPct) ? raw.aoiCloudPct.toFixed(2) : '';
           for (let pointIndex = 0; pointIndex < probePoints.length; pointIndex++) {
             const point = probePoints[pointIndex];
             const vals = valueCells(raw, point.lon, point.lat);
-            rows.push([stepLabel, csvCell(point.label), pointIndex, '0.00', point.lon.toFixed(6), point.lat.toFixed(6), mode.toUpperCase(), ...vals].join(','));
+            rows.push([stepLabel, csvCell(raw.dateStr), csvCell(point.label), pointIndex, '0.00', point.lon.toFixed(6), point.lat.toFixed(6), mode.toUpperCase(), ...vals, scC, aoiC].join(','));
           }
         }
       }

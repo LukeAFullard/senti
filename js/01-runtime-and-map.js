@@ -334,8 +334,28 @@
           if (m.type === 'index-grid') {
             const out=new Float32Array(m.length);
             let sum=0,count=0;
+            function inside(x,y,ring) {
+              let yes=false;
+              for(let i=0,j=ring.length-1;i<ring.length;j=i++) {
+                const xi=ring[i][0],yi=ring[i][1],xj=ring[j][0],yj=ring[j][1];
+                if(((yi>y)!==(yj>y))&&(x<((xj-xi)*(y-yi))/((yj-yi)||1e-30)+xi)) yes=!yes;
+              }
+              return yes;
+            }
+            const usePoly = m.polygon && m.polygon.length > 2 && m.win && m.origin && m.res;
+            const ww=usePoly ? (m.win[2]-m.win[0]) : 0;
+            const wh=usePoly ? (m.win[3]-m.win[1]) : 0;
             for(let i=0;i<m.length;i++) {
               if (m.mask && m.mask[i]===1) { out[i]=NaN; continue; }
+              if (usePoly) {
+                 const x = i % m.width, y = Math.floor(i / m.width);
+                 const px=m.win[0]+((x+0.5)/m.width)*ww, mapX=m.origin[0]+px*m.res[0];
+                 const py=m.win[1]+((y+0.5)/m.height)*wh, mapY=m.origin[1]+py*m.res[1];
+                 // NOTE: Inside worker, proj4 is not available directly, so polygon should have been transformed prior to sending, or checked against lonLat.
+                 // The polygon is passed as lon/lat. We must either pass a transformed polygon, or not check it here if proj is needed.
+                 // Actually, it's simpler to pass the polygon coordinates ALREADY in the target CRS from main thread, rather than EPSG:4326.
+                 if (!inside(mapX, mapY, m.polygon)) { out[i]=NaN; continue; }
+              }
               if(m.waterMaskOn) {
                 const g=m.green[i], sw=m.swir[i], den=g+sw;
                 const mndwi=Number.isFinite(g)&&Number.isFinite(sw)&&Math.abs(den)>1e-6?(g-sw)/den:NaN;
@@ -350,6 +370,17 @@
             self.postMessage({id:m.id,ok:true,result:{indexGrid:out,meanVal:count?sum/count:NaN}},[out.buffer]);
           } else if (m.type === 'composite-index') {
             const out=new Float32Array(m.length), vals=new Float32Array(m.grids.length);
+            function qSelect(a,l,r,k){
+              while(l<r){
+                const pI=l+Math.floor(Math.random()*(r-l+1)), pV=a[pI];
+                a[pI]=a[r];a[r]=pV;
+                let sI=l;
+                for(let x=l;x<r;x++){if(a[x]<pV){const t=a[x];a[x]=a[sI];a[sI]=t;sI++;}}
+                a[r]=a[sI];a[sI]=pV;
+                if(k===sI)return a[k];else if(k<sI)r=sI-1;else l=sI+1;
+              }
+              return a[k];
+            }
             for(let i=0;i<m.length;i++) {
               let n=0;
               for(let j=0;j<m.grids.length;j++) { const v=m.grids[j][i]; if(Number.isFinite(v)) vals[n++]=v; }
@@ -358,24 +389,46 @@
               else if(m.stat==='max') { let v=-Infinity; for(let j=0;j<n;j++) if(vals[j]>v)v=vals[j]; out[i]=v; }
               else if(m.stat==='min') { let v=Infinity; for(let j=0;j<n;j++) if(vals[j]<v)v=vals[j]; out[i]=v; }
               else {
-                const sorted=Array.from(vals.subarray(0,n)).sort((a,b)=>a-b);
+                const sub=vals.subarray(0,n);
                 const q=m.stat==='median'?0.5:Math.max(0.01,Math.min(0.99,m.pVal/100));
                 const pos=(n-1)*q, base=Math.floor(pos), frac=pos-base;
-                out[i]=base+1<n?sorted[base]+frac*(sorted[base+1]-sorted[base]):sorted[base];
+                const v1=qSelect(sub,0,n-1,base);
+                if(frac>0 && base+1<n){
+                  let v2=Infinity;
+                  for(let x=base+1;x<n;x++)if(sub[x]<v2)v2=sub[x];
+                  out[i]=v1+frac*(v2-v1);
+                } else out[i]=v1;
               }
             }
             self.postMessage({id:m.id,ok:true,result:{indexGrid:out}},[out.buffer]);
           } else if (m.type === 'composite-rgb') {
             const r=new Uint8ClampedArray(m.length), g=new Uint8ClampedArray(m.length), b=new Uint8ClampedArray(m.length), a=new Uint8ClampedArray(m.length);
             const vals=new Float32Array(m.channels.length);
+            function qSelectRgb(a,l,rBound,k){
+              while(l<rBound){
+                const pI=l+Math.floor(Math.random()*(rBound-l+1)), pV=a[pI];
+                a[pI]=a[rBound];a[rBound]=pV;
+                let sI=l;
+                for(let x=l;x<rBound;x++){if(a[x]<pV){const t=a[x];a[x]=a[sI];a[sI]=t;sI++;}}
+                a[rBound]=a[sI];a[sI]=pV;
+                if(k===sI)return a[k];else if(k<sI)rBound=sI-1;else l=sI+1;
+              }
+              return a[k];
+            }
             function statValue(n) {
               if(!n) return NaN;
               if(m.stat==='mean'){let sum=0;for(let j=0;j<n;j++)sum+=vals[j];return sum/n;}
               if(m.stat==='max'){let v=-Infinity;for(let j=0;j<n;j++)if(vals[j]>v)v=vals[j];return v;}
               if(m.stat==='min'){let v=Infinity;for(let j=0;j<n;j++)if(vals[j]<v)v=vals[j];return v;}
-              const sorted=Array.from(vals.subarray(0,n)).sort((x,y)=>x-y), q=m.stat==='median'?0.5:Math.max(0.01,Math.min(0.99,m.pVal/100));
-              const pos=(n-1)*q,base=Math.floor(pos),frac=pos-base;
-              return base+1<n?sorted[base]+frac*(sorted[base+1]-sorted[base]):sorted[base];
+              const sub=vals.subarray(0,n), q=m.stat==='median'?0.5:Math.max(0.01,Math.min(0.99,m.pVal/100));
+              const pos=(n-1)*q, base=Math.floor(pos), frac=pos-base;
+              const v1=qSelectRgb(sub,0,n-1,base);
+              if(frac>0 && base+1<n){
+                let v2=Infinity;
+                for(let x=base+1;x<n;x++)if(sub[x]<v2)v2=sub[x];
+                return v1+frac*(v2-v1);
+              }
+              return v1;
             }
             for(let i=0;i<m.length;i++) {
               let n=0;
@@ -479,8 +532,62 @@
     const id = ++cpuWorkerTaskId;
     return new Promise((resolve, reject) => {
       cpuWorkerPending.set(id, { resolve, reject });
-      try { worker.postMessage({ ...payload, type, id }); }
-      catch (err) { cpuWorkerPending.delete(id); reject(err); }
+      try {
+        const transferList = [];
+        const payloadCopy = { ...payload, type, id };
+
+        // We avoid detaching original cached data by making a copy before transferring
+        // to the worker. Since we're sending copies instead of detaching caches, we
+        // allocate here, but then use zero-copy transfer to the worker.
+        if (type === 'index-grid' && payload.bandArrays) {
+          payloadCopy.bandArrays = payload.bandArrays.map(arr => {
+            const copy = new Float32Array(arr);
+            transferList.push(copy.buffer);
+            return copy;
+          });
+          if (payload.mask) {
+            payloadCopy.mask = new Uint8Array(payload.mask);
+            transferList.push(payloadCopy.mask.buffer);
+          }
+          if (payload.green) {
+            payloadCopy.green = new Float32Array(payload.green);
+            transferList.push(payloadCopy.green.buffer);
+          }
+          if (payload.swir) {
+            payloadCopy.swir = new Float32Array(payload.swir);
+            transferList.push(payloadCopy.swir.buffer);
+          }
+        } else if (type === 'composite-index' && payload.grids) {
+          payloadCopy.grids = payload.grids.map(grid => {
+            const copy = new Float32Array(grid);
+            transferList.push(copy.buffer);
+            return copy;
+          });
+        } else if (type === 'composite-rgb' && payload.channels) {
+          payloadCopy.channels = payload.channels.map(ch => {
+            const chCopy = ch.map(c => {
+               const cCopy = new Uint8ClampedArray(c);
+               transferList.push(cCopy.buffer);
+               return cCopy;
+            });
+            return chCopy;
+          });
+        } else if (type === 'seasonal-anomaly' && payload.baselines) {
+          payloadCopy.baselines = payload.baselines.map(b => {
+             const copy = new Float32Array(b);
+             transferList.push(copy.buffer);
+             return copy;
+          });
+          if (payload.target) {
+             payloadCopy.target = new Float32Array(payload.target);
+             transferList.push(payloadCopy.target.buffer);
+          }
+        }
+
+        worker.postMessage(payloadCopy, transferList);
+      } catch (err) {
+        cpuWorkerPending.delete(id); reject(err);
+      }
     });
   }
 
@@ -503,6 +610,7 @@
   proj4.defs('EPSG:3857', '+proj=merc +a=6378137 +b=6378137 +lat_ts=0 +lon_0=0 +x_0=0 +y_0=0 +k=1 +units=m +nadgrids=@null +wktext +no_defs');
 
   let drawnBbox = null;
+  let pipelineGeneration = 0;
   let probePoints = []; // [{ id, label, lon, lat, layer }]
   let nextProbePointId = 1;
   let pointSelectionMode = false;
@@ -518,8 +626,38 @@
   let validScenes = [];
   let displaySteps = [];
   let activeRenderedState = null;
-  const sceneRawCache = new Map();
-  const compositeCache = new Map();
+
+class LRUCache {
+  constructor(maxSize) {
+    this.maxSize = maxSize;
+    this.cache = new Map();
+  }
+  get(key) {
+    if (!this.cache.has(key)) return undefined;
+    const value = this.cache.get(key);
+    this.cache.delete(key);
+    this.cache.set(key, value);
+    return value;
+  }
+  set(key, value) {
+    if (this.cache.has(key)) {
+      this.cache.delete(key);
+    } else if (this.cache.size >= this.maxSize) {
+      const firstKey = this.cache.keys().next().value;
+      this.cache.delete(firstKey);
+    }
+    this.cache.set(key, value);
+  }
+  has(key) {
+    return this.cache.has(key);
+  }
+  clear() {
+    this.cache.clear();
+  }
+}
+
+  const sceneRawCache = new LRUCache(12);
+  const compositeCache = new LRUCache(6);
   let optramCalibration = null;
   let optramCalibrationPromise = null;
   let optramPersistenceRunning = false;
@@ -650,7 +788,28 @@
     addComparisonPoint(L.marker(event.latlng));
   });
   // Avoid interpreting vertices from a rectangle, line or polygon drawing as comparison points.
-  map.on('draw:drawstart', function () { setPointSelectionMode(false); });
+  let currentDrawHandler = null;
+  // Instead of relying on e.handler (which is missing in some Leaflet.Draw versions on drawstart),
+  // Leaflet.Draw attaches the handler to map under map._toolbars... or map.on.
+  // Actually, we can just trigger the disable on the map instance safely by clearing drawing state.
+  map.on('draw:drawstart', function (e) {
+    setPointSelectionMode(false);
+  });
+
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' || e.keyCode === 27) {
+      // Leaflet.Draw natively supports firing a toolbar cancel if we access it,
+      // but an easier robust fallback is to dispatch a custom disable if it's active.
+      if (window.L && L.Draw && L.Draw.Event) {
+          // If a drawing is in progress, any Leaflet vector draw handler listens to cancel.
+          const toolbars = Object.values(map._toolbars || {});
+          for (const tb of toolbars) {
+             if (tb && typeof tb.disable === 'function') tb.disable();
+          }
+      }
+      setPointSelectionMode(false);
+    }
+  });
 
   map.on(L.Draw.Event.CREATED, function (event) {
     const type = event.layerType;
@@ -671,6 +830,33 @@
       const b = layer.getBounds();
       drawnBbox = [b.getWest(), b.getSouth(), b.getEast(), b.getNorth()];
       log('AOI Rectangle set: ' + drawnBbox.map(v => v.toFixed(5)).join(', '));
+      runBtn.disabled = false;
+      runBtn.textContent = 'Search & Render Scenes';
+      map.fitBounds(b, { padding: [18, 18], maxZoom: 15 });
+    } else if (type === 'polygon' && (!probePolygon || probePolygon.length === 0 || !drawnBbox)) {
+      // Treat the first polygon or a polygon drawn when no AOI exists as the main Analysis AOI
+      aoiGroup.clearLayers();
+      clearProbeSelection();
+      resetResults();
+      updatePolygonStatsPanel(null, null);
+      clearRadarOverlay();
+      radarScenes = []; radarRawCache.clear();
+      radarSceneSelect.innerHTML = '<option value="">Search for RTC scenes first</option>';
+      radarBaselineSelect.innerHTML = '<option value="">Search for at least two scenes</option>';
+      radarSceneSelect.disabled = true; radarBaselineSelect.disabled = true; radarRenderBtn.disabled = true; radarCompareBtn.disabled = true; radarStatus.textContent = 'AOI changed; search Sentinel-1 RTC again.';
+      clearRadarCompareOverlay();
+
+      aoiGroup.addLayer(layer);
+
+      const rings = layer.getLatLngs();
+      const outerRing = Array.isArray(rings[0]) ? rings[0] : rings;
+      probePolygonLayer = layer;
+      probePolygon = outerRing.map(ll => [ll.lng, ll.lat]);
+
+      const b = layer.getBounds();
+      drawnBbox = [b.getWest(), b.getSouth(), b.getEast(), b.getNorth()];
+
+      log(`Analysis Polygon AOI set (${probePolygon.length} edges). BBox: ` + drawnBbox.map(v => v.toFixed(5)).join(', '));
       runBtn.disabled = false;
       runBtn.textContent = 'Search & Render Scenes';
       map.fitBounds(b, { padding: [18, 18], maxZoom: 15 });

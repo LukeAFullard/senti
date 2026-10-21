@@ -274,13 +274,17 @@
     };
   }
 
+  let renderGeneration = 0;
   async function displayStepByIndex(idx) {
     if (!displaySteps[idx]) return;
+    const startGeneration = pipelineGeneration;
+    const currentRenderGen = ++renderGeneration;
     const step = displaySteps[idx];
     const mode = outputMode.value;
 
     try {
       const rendered = await renderVisualForStep(idx);
+      if (startGeneration !== pipelineGeneration || currentRenderGen !== renderGeneration) return;
       activeRenderedState = rendered;
       geoTiffBtn.disabled = !rendered.raw?.indexGrid || ['rgb', 'rgb_bands', 'false_color'].includes(mode);
       reportBtn.disabled = false;

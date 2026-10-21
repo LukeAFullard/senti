@@ -17,6 +17,7 @@
   }
 
   function resetResults() {
+    pipelineGeneration++;
     clearResultOverlay();
     clearSeasonalAnomalyOverlay();
     clearRadarCompareOverlay();
@@ -195,37 +196,33 @@
 
   async function readSclMask(item, bbox, targetSize, crs, referenceGrid = null) {
     const sclAsset = item?.assets?.scl;
-    if (!sclAsset?.href) return { mask: null, aoiCloudPct: null };
-    try {
-      const tiff = await GeoTIFF.fromUrl(sclAsset.href);
-      const image = await tiff.getImage();
-      const pixelInfo = referenceGrid
-        ? calculatePixelWindowForReferenceGrid(referenceGrid, image, crs)
-        : calculatePixelWindow(bbox, image, crs);
-      const raw = await image.readRasters(rasterReadOptions({
-        window: pixelInfo.window,
-        width: targetSize.width,
-        height: targetSize.height,
-        resampleMethod: 'nearest'
-      }));
-      const scl = raw[0];
-      const mask = new Uint8Array(scl.length);
-      let validCount = 0, cloudCount = 0;
-      for (let i = 0; i < scl.length; i++) {
-        const c = Number(scl[i]);
-        if (c === 0 || c === 1) { mask[i] = 1; continue; }
-        validCount++;
-        // SCL 3=cloud shadow, 8/9=clouds, 10=cirrus, 11=snow/ice.
-        if (c === 3 || c === 8 || c === 9 || c === 10 || c === 11) {
-          mask[i] = 1;
-          cloudCount++;
-        }
+    if (!sclAsset?.href) throw new Error('SCL asset is missing.');
+    const tiff = await GeoTIFF.fromUrl(sclAsset.href);
+    const image = await tiff.getImage();
+    const pixelInfo = referenceGrid
+      ? calculatePixelWindowForReferenceGrid(referenceGrid, image, crs)
+      : calculatePixelWindow(bbox, image, crs);
+    const raw = await image.readRasters(rasterReadOptions({
+      window: pixelInfo.window,
+      width: targetSize.width,
+      height: targetSize.height,
+      resampleMethod: 'nearest'
+    }));
+    const scl = raw[0];
+    const mask = new Uint8Array(scl.length);
+    let validCount = 0, cloudCount = 0;
+    for (let i = 0; i < scl.length; i++) {
+      const c = Number(scl[i]);
+      if (c === 0 || c === 1) { mask[i] = 1; continue; }
+      validCount++;
+      // SCL 3=cloud shadow, 8/9=clouds, 10=cirrus, 11=snow/ice.
+      if (c === 3 || c === 8 || c === 9 || c === 10 || c === 11) {
+        mask[i] = 1;
+        cloudCount++;
       }
-      const aoiCloudPct = validCount > 0 ? (cloudCount / validCount) * 100 : 0;
-      return { mask, aoiCloudPct };
-    } catch (_) {
-      return { mask: null, aoiCloudPct: null };
     }
+    const aoiCloudPct = validCount > 0 ? (cloudCount / validCount) * 100 : 0;
+    return { mask, aoiCloudPct };
   }
 
   function getActiveModes() {
@@ -375,11 +372,15 @@
       throw new Error('OPTRAM requires Sentinel-2 B04, B08 and B12 assets.');
     }
     const b12 = await readBandScaled(assets.swir22, drawnBbox, null, null, item);
-    const [red, nir, sclObj] = await Promise.all([
-      readBandScaled(assets.red, drawnBbox, b12.size, b12.crs, item, b12),
-      readBandScaled(assets.nir, drawnBbox, b12.size, b12.crs, item, b12),
-      readSclMask(item, drawnBbox, b12.size, b12.crs, b12)
-    ]);
+    const redPromise = readBandScaled(assets.red, drawnBbox, b12.size, b12.crs, item, b12);
+    const nirPromise = readBandScaled(assets.nir, drawnBbox, b12.size, b12.crs, item, b12);
+    let sclObj = { mask: null, aoiCloudPct: null };
+    try {
+      sclObj = await readSclMask(item, drawnBbox, b12.size, b12.crs, b12);
+    } catch (err) {
+      if (applyCloudMask) throw new Error('Cloud masking is required but SCL asset is unavailable or failed to load.');
+    }
+    const [red, nir] = await Promise.all([redPromise, nirPromise]);
     const ndvi = new Float32Array(b12.data.length);
     const str = new Float32Array(b12.data.length);
     ndvi.fill(NaN);
@@ -547,6 +548,7 @@
   }
 
   async function computeSingleItemRaw(item, mode, applyCloudMask) {
+    const startGeneration = pipelineGeneration;
     const sceneStartedAt = performance.now();
     const waterMaskOn = waterOnlyChk.checked && WATER_QUALITY_PROXY_MODES.has(mode);
     const waterThreshold = Math.max(-0.5, Math.min(0.5, Number(waterMaskThresholdInput.value) || 0));
@@ -569,10 +571,15 @@
       const size = getOutputSize(refWindow);
       width = size.width; height = size.height;
 
-      const [rgb, sclObj] = await Promise.all([
-        refImage.readRasters(rasterReadOptions({ window: refWindow, width, height, interleave: false, resampleMethod: 'bilinear' })),
-        readSclMask(item, drawnBbox, size, refCrs, { pixelInfo, crs: refCrs })
-      ]);
+      const rgbPromise = refImage.readRasters(rasterReadOptions({ window: refWindow, width, height, interleave: false, resampleMethod: 'bilinear' }));
+      let sclObj = { mask: null, aoiCloudPct: null };
+      try {
+        sclObj = await readSclMask(item, drawnBbox, size, refCrs, { pixelInfo, crs: refCrs });
+      } catch (err) {
+        if (applyCloudMask) throw new Error('Cloud masking is required but SCL asset is unavailable or failed to load.');
+      }
+      const rgb = await rgbPromise;
+      if (startGeneration !== pipelineGeneration) throw new Error('Pipeline cancelled');
       aoiCloudPct = sclObj.aoiCloudPct;
       const mask = applyCloudMask ? sclObj.mask : null;
 
@@ -592,11 +599,16 @@
     } else if (mode === 'rgb' || mode === 'rgb_bands' || mode === 'false_color') {
       const bandKeys = mode === 'false_color' ? ['nir', 'red', 'green'] : ['red', 'green', 'blue'];
       const b1 = await readBandScaled(assets[bandKeys[0]], drawnBbox, null, null, item);
-      const [b2, b3, sclObj] = await Promise.all([
-        readBandScaled(assets[bandKeys[1]], drawnBbox, b1.size, b1.crs, item, b1),
-        readBandScaled(assets[bandKeys[2]], drawnBbox, b1.size, b1.crs, item, b1),
-        readSclMask(item, drawnBbox, b1.size, b1.crs, b1)
-      ]);
+      const b2Promise = readBandScaled(assets[bandKeys[1]], drawnBbox, b1.size, b1.crs, item, b1);
+      const b3Promise = readBandScaled(assets[bandKeys[2]], drawnBbox, b1.size, b1.crs, item, b1);
+      let sclObj = { mask: null, aoiCloudPct: null };
+      try {
+        sclObj = await readSclMask(item, drawnBbox, b1.size, b1.crs, b1);
+      } catch (err) {
+        if (applyCloudMask) throw new Error('Cloud masking is required but SCL asset is unavailable or failed to load.');
+      }
+      const [b2, b3] = await Promise.all([b2Promise, b3Promise]);
+      if (startGeneration !== pipelineGeneration) throw new Error('Pipeline cancelled');
       refImage = b1.image; refWindow = b1.pixelInfo.window; refCrs = b1.crs;
       refOrigin = b1.pixelInfo.origin; refRes = b1.pixelInfo.resolution;
       width = b1.size.width; height = b1.size.height;
@@ -621,6 +633,7 @@
     } else if (mode === 'optram') {
       const input = await readOptramInputsSingleItem(item, applyCloudMask);
       const model = await ensureOptramCalibration();
+      if (startGeneration !== pipelineGeneration) throw new Error('Pipeline cancelled');
       width = input.width; height = input.height;
       refImage = input.refImage; refWindow = input.refWindow; refCrs = input.refCrs;
       refOrigin = input.refOrigin; refRes = input.refRes;
@@ -652,11 +665,18 @@
         const result = await readBandScaled(getBandAsset(assets, key), drawnBbox, refBand.size, refBand.crs, item, refBand);
         return [key, result];
       }));
+      if (startGeneration !== pipelineGeneration) throw new Error('Pipeline cancelled');
       const bandResults = Object.fromEntries(loaded);
       const bandArrays = def.bands.map(key => bandResults[key].data);
       const greenForMask = waterMaskOn ? bandResults.green.data : null;
       const swirForMask = waterMaskOn ? bandResults.swir16.data : null;
-      const [sclObj] = await Promise.all([readSclMask(item, drawnBbox, refBand.size, refBand.crs, refBand)]);
+      let sclObj = { mask: null, aoiCloudPct: null };
+      try {
+        sclObj = await readSclMask(item, drawnBbox, refBand.size, refBand.crs, refBand);
+      } catch (err) {
+        if (applyCloudMask) throw new Error('Cloud masking is required but SCL asset is unavailable or failed to load.');
+      }
+      if (startGeneration !== pipelineGeneration) throw new Error('Pipeline cancelled');
 
       refImage = refBand.image;
       refWindow = refBand.pixelInfo.window;
@@ -668,10 +688,14 @@
       aoiCloudPct = sclObj.aoiCloudPct;
       const mask = applyCloudMask ? sclObj.mask : null;
 
+      const tFetchEnd = performance.now();
+      log(`[Timing] Asset fetch & mask processing for tile ${item.id} took ${((tFetchEnd - sceneStartedAt) / 1000).toFixed(2)}s`);
       const calcStartedAt = performance.now();
       try {
         const workerResult = await runCpuWorkerTask('index-grid', {
           length: width * height,
+          width, height, win: refWindow, origin: refOrigin, res: refRes,
+          polygon: probePolygon ? probePolygon.map(p => proj4('EPSG:4326', refCrs, p)) : null, // Transform to native CRS to match origin/res pixel mapping
           mode,
           bandArrays,
           mask: mask || null,
@@ -681,14 +705,27 @@
           swir: swirForMask,
           waterThreshold
         });
+        if (startGeneration !== pipelineGeneration) throw new Error('Pipeline cancelled');
         indexGrid = workerResult.indexGrid;
         // Keep worker-derived mean only as a local hint; the shared reduction below
         // remains the single source of truth for the cached raw object.
       } catch (workerErr) {
         // Robust fallback for browsers that block Blob workers / worker execution.
         indexGrid = new Float32Array(width * height);
+        function inside(x,y,ring) { let yes=false; for(let i=0,j=ring.length-1;i<ring.length;j=i++){ const xi=ring[i][0],yi=ring[i][1],xj=ring[j][0],yj=ring[j][1]; if(((yi>y)!==(yj>y))&&(x<((xj-xi)*(y-yi))/((yj-yi)||1e-30)+xi)) yes=!yes; } return yes; }
+        const usePoly = probePolygon && probePolygon.length > 2;
+        const polyCrs = usePoly ? probePolygon.map(p => proj4('EPSG:4326', refCrs, p)) : null;
+        const ww = refWindow[2]-refWindow[0], wh = refWindow[3]-refWindow[1];
         for (let i = 0; i < indexGrid.length; i++) {
           if (mask && mask[i] === 1) { indexGrid[i] = NaN; continue; }
+          if (usePoly) {
+            const x = i % width, y = Math.floor(i / width);
+            const px = refWindow[0] + ((x + 0.5) / width) * ww;
+            const py = refWindow[1] + ((y + 0.5) / height) * wh;
+            const mapX = refOrigin[0] + px * refRes[0];
+            const mapY = refOrigin[1] + py * refRes[1];
+            if (!inside(mapX, mapY, polyCrs)) { indexGrid[i] = NaN; continue; }
+          }
           if (waterMaskOn) {
             const green = greenForMask[i], swir = swirForMask[i];
             const denom = green + swir;
@@ -744,20 +781,23 @@
   async function computeSceneRaw(item, mode, applyCloudMask) {
     if (!Array.isArray(item?.tiles)) return computeSingleItemRaw(item, mode, applyCloudMask);
 
+    const startGeneration = pipelineGeneration;
     const waterMaskOn = waterOnlyChk.checked && WATER_QUALITY_PROXY_MODES.has(mode);
     const waterThreshold = Math.max(-0.5, Math.min(0.5, Number(waterMaskThresholdInput.value) || 0));
     const cacheKey = `${item.id}_${mode}_${applyCloudMask}_${waterMaskOn}_${waterThreshold}`;
     if (sceneRawCache.has(cacheKey)) return sceneRawCache.get(cacheKey);
 
-    const tileRaws = [];
     const sortedTiles = item.tiles.slice().sort((a, b) => getCloudCover(a) - getCloudCover(b));
-    for (const tile of sortedTiles) {
+    const tileRawsUnfiltered = await mapConcurrent(sortedTiles, SCENE_CONCURRENCY, async (tile) => {
       try {
-        tileRaws.push(await computeSingleItemRaw(tile, mode, applyCloudMask));
+        return await computeSingleItemRaw(tile, mode, applyCloudMask);
       } catch (err) {
+        if (err.message === 'Pipeline cancelled') throw err;
         log(`Tile ${tile.id} skipped for ${getSceneDateStr(item)}: ${err.message}`);
+        return null;
       }
-    }
+    });
+    const tileRaws = tileRawsUnfiltered.filter(Boolean);
     if (tileRaws.length === 0) throw new Error(`No intersecting tiles could be read for ${getSceneDateStr(item)}.`);
 
     // Alias single-tile acquisitions to the virtual acquisition ID so all charts,
@@ -795,6 +835,8 @@
     let indexGrid = null;
     let rgbChannels = null;
     const total = width * height;
+
+    if (startGeneration !== pipelineGeneration) throw new Error('Pipeline cancelled');
 
     const tileTransforms = tileRaws.map(raw => {
       const tlLonLat = proj4(ref.refCrs, 'EPSG:4326', [refOrigin[0], refOrigin[1]]);
@@ -875,7 +917,8 @@
       tileCount: item.tiles.length, tileIds: item.tiles.map(t => t.id)
     };
     sceneRawCache.set(cacheKey, mosaic);
-    log(`Mosaicked ${item.tiles.length} tiles for ${getSceneDateStr(item)} (${width}×${height} output grid).`);
+    const tMosaicEnd = performance.now();
+    log(`Mosaicked ${item.tiles.length} tiles for ${getSceneDateStr(item)} (${width}×${height} output grid) in ${((tMosaicEnd - sceneStartedAt) / 1000).toFixed(2)}s.`);
     return mosaic;
   }
 

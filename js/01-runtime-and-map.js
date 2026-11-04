@@ -712,6 +712,8 @@ class LRUCache {
   map.getPane('anomalyPane').style.zIndex = '370';
   map.createPane('radarComparePane');
   map.getPane('radarComparePane').style.zIndex = '380';
+  map.createPane('s5pPane');
+  map.getPane('s5pPane').style.zIndex = '365';
 
   let radarScenes = [];
   const radarLocalItems = [];
@@ -936,3 +938,18 @@ class LRUCache {
       displayStepByIndex(Number(sceneSlider.value));
     }
   });
+
+  if (typeof window !== 'undefined') {
+    window.runCpuWorkerTask = runCpuWorkerTask;
+    Object.defineProperty(window, 'map', { get: () => map, configurable: true });
+    Object.defineProperty(window, 'drawnBbox', {
+      get: () => drawnBbox,
+      set: (val) => { drawnBbox = val; },
+      configurable: true
+    });
+    Object.defineProperty(window, 'activeRenderedState', {
+      get: () => activeRenderedState,
+      configurable: true
+    });
+    Object.defineProperty(window, 'legend', { get: () => legend, configurable: true });
+  }

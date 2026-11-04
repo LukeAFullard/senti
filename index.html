@@ -201,13 +201,6 @@
           <option value="ndti">NDTI (Turbidity Proxy)</option>
           <option value="turbidity_ratio">Red/Green Ratio (Turbidity/TSS Proxy)</option>
           <option value="awei_nsh">AWEI-nsh (Water Extraction)</option>
-          <option value="s2_aot">S2-AOT (Aerosol Optical Thickness @ 550nm)</option>
-          <option value="s2_wvp">S2-WVP (Water Vapour Path, cm)</option>
-          <option value="asi">ASI (Aerosol &amp; Smog Index)</option>
-          <option value="ngai">NGAI (Normalized Green-Aerosol Index)</option>
-          <option value="spdi">SPDI (Surface Plume Dispersion Index)</option>
-          <option value="cdi">CDI (Cloud/Aerosol Discrimination Index)</option>
-          <option value="pm25_proxy">PM2.5 Proxy (Screening μg/m³)</option>
         </select>
       </div>
       <div>
@@ -481,6 +474,41 @@
       <span style="display:inline-block;background:#858585;width:12px;height:12px;border-radius:2px;margin-right:4px;"></span>Below threshold / NoData
       <div class="small-note">Directional agreement only. The two sensors respond to different surface properties; agreement is not validation or proof of a common physical cause.</div>
     </div>
+  </div>
+
+  <div class="panel" id="s5pExplorerPanel" style="margin-top:14px;">
+    <h3 style="margin-top:0; font-size:15px;">Sentinel-5P (TROPOMI) Trace Gas Explorer</h3>
+    <p class="small-note">Uses your drawn AOI rectangle and date range to search the public Sentinel-5P Level-2 NetCDF catalogue (NO₂, SO₂, CO, O₃, CH₄, HCHO, UVAI). Downloads the orbit swath, filters by quality assurance (<code>qa_value &ge; 0.50</code>), and grids the trace-gas column directly in your browser via WebAssembly HDF5 (<code>h5wasm</code>). Because TROPOMI footprints are ~3.5 &times; 5.5 km, draw a regional AOI (e.g. 25–200 km across) for best spatial detail.</p>
+    <div class="controls" style="grid-template-columns:repeat(auto-fit,minmax(185px,1fr));">
+      <div>
+        <label for="s5pGasSelect">Trace Gas / Product</label>
+        <select id="s5pGasSelect"></select>
+      </div>
+      <div>
+        <label for="s5pSceneSelect">Matching S5P Orbit Acquisitions</label>
+        <select id="s5pSceneSelect" disabled><option value="">Search Sentinel-5P first</option></select>
+      </div>
+      <div style="display:flex;align-items:end;gap:8px;flex-wrap:wrap;">
+        <button id="s5pSearchBtn" type="button" class="btn-secondary">Search Sentinel-5P</button>
+        <button id="s5pRenderBtn" type="button" class="btn-secondary" disabled>Load &amp; Grid Gas Map</button>
+        <button id="s5pClearBtn" type="button" class="btn-secondary" disabled>Clear S5P Overlay</button>
+        <button id="s5pExportTiffBtn" type="button" class="btn-secondary" disabled>Export S5P GeoTIFF</button>
+      </div>
+    </div>
+    <div id="s5pStatus" class="small-note" style="margin-top:8px;">Draw an AOI rectangle on the map, then click "Search Sentinel-5P".</div>
+    <div id="s5pLegend" style="display:none;margin-top:10px;padding:10px;background:#222;border:1px solid #444;border-radius:6px;font-size:12px;"></div>
+    <details style="margin-top:10px;">
+      <summary style="cursor:pointer;font-weight:650;">Fallback: load a local Sentinel-5P Level-2 NetCDF (.nc) file from disk</summary>
+      <div class="controls" style="grid-template-columns:repeat(auto-fit,minmax(220px,1fr));margin-top:8px;">
+        <div>
+          <label for="s5pLocalFileInput">Local S5P L2 NetCDF (.nc) File</label>
+          <input id="s5pLocalFileInput" type="file" accept=".nc,.h5,.hdf5">
+        </div>
+        <div style="display:flex;align-items:end;">
+          <button id="s5pRenderLocalBtn" type="button" class="btn-secondary">Grid Local NetCDF Over AOI</button>
+        </div>
+      </div>
+    </details>
   </div>
 
   <div class="panel" style="margin-top:14px;">

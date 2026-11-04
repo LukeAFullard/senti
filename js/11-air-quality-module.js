@@ -171,6 +171,146 @@
     }
   };
 
+  /**
+   * Catalog of supported Sentinel-5P Level-2 NetCDF trace-gas products in the
+   * Microsoft Planetary Computer STAC catalog (`sentinel-5p-l2-netcdf`).
+   */
+  const S5P_PRODUCTS = {
+    no2: {
+      id: 'no2',
+      name: 'Nitrogen Dioxide (NO₂) Tropospheric Column',
+      shortLabel: 'NO₂',
+      stacProduct: 'L2__NO2___',
+      assetKey: 'no2',
+      h5Var: 'PRODUCT/nitrogendioxide_tropospheric_column',
+      displayUnit: 'µmol/m²',
+      multiplier: 1e6,
+      minQa: 0.50,
+      scale: { min: 0, max: 150, breaks: [15, 35, 65, 100] },
+      legendItems: [
+        ['#800026', 'Severe (> 100 µmol/m²)'],
+        ['#bd0026', 'High (65–100)'],
+        ['#e31a1c', 'Elevated (35–65)'],
+        ['#fd8d3c', 'Moderate (15–35)'],
+        ['#fecc5c', 'Low / Background (< 15)']
+      ]
+    },
+    so2: {
+      id: 'so2',
+      name: 'Sulfur Dioxide (SO₂) Total Vertical Column',
+      shortLabel: 'SO₂',
+      stacProduct: 'L2__SO2___',
+      assetKey: 'so2',
+      h5Var: 'PRODUCT/sulfurdioxide_total_vertical_column',
+      displayUnit: 'µmol/m²',
+      multiplier: 1e6,
+      minQa: 0.50,
+      scale: { min: 0, max: 500, breaks: [50, 120, 250, 400] },
+      legendItems: [
+        ['#49006a', 'Volcanic / Extreme (> 400 µmol/m²)'],
+        ['#7a0177', 'Heavy Plume (250–400)'],
+        ['#ae017e', 'Elevated (120–250)'],
+        ['#f768a1', 'Moderate (50–120)'],
+        ['#fcc5c0', 'Background (< 50)']
+      ]
+    },
+    co: {
+      id: 'co',
+      name: 'Carbon Monoxide (CO) Total Column',
+      shortLabel: 'CO',
+      stacProduct: 'L2__CO____',
+      assetKey: 'co',
+      h5Var: 'PRODUCT/carbonmonoxide_total_column',
+      displayUnit: 'mmol/m²',
+      multiplier: 1e3,
+      minQa: 0.50,
+      scale: { min: 15, max: 60, breaks: [22, 30, 38, 48] },
+      legendItems: [
+        ['#67000d', 'Dense Combustion / Smoke (> 48 mmol/m²)'],
+        ['#a50f15', 'Elevated (38–48)'],
+        ['#ef3b2c', 'Moderate (30–38)'],
+        ['#fb6a4a', 'Low-Moderate (22–30)'],
+        ['#fc9272', 'Clean Column (< 22)']
+      ]
+    },
+    o3: {
+      id: 'o3',
+      name: 'Ozone (O₃) Total Vertical Column',
+      shortLabel: 'O₃',
+      stacProduct: 'L2__O3____',
+      assetKey: 'o3',
+      h5Var: 'PRODUCT/ozone_total_vertical_column',
+      displayUnit: 'Dobson Units (DU)',
+      multiplier: 2241.15,
+      minQa: 0.50,
+      scale: { min: 220, max: 420, breaks: [260, 300, 340, 380] },
+      legendItems: [
+        ['#08306b', 'High Column (> 380 DU)'],
+        ['#08519c', 'Above Normal (340–380)'],
+        ['#2171b5', 'Typical Column (300–340)'],
+        ['#4292c6', 'Low Column (260–300)'],
+        ['#6baed6', 'Depleted / Ozone Hole (< 260)']
+      ]
+    },
+    ch4: {
+      id: 'ch4',
+      name: 'Methane (CH₄) Mixing Ratio (Bias Corrected)',
+      shortLabel: 'CH₄',
+      stacProduct: 'L2__CH4___',
+      assetKey: 'ch4',
+      h5Var: 'PRODUCT/methane_mixing_ratio_bias_corrected',
+      displayUnit: 'ppb',
+      multiplier: 1.0,
+      minQa: 0.50,
+      scale: { min: 1800, max: 2000, breaks: [1850, 1890, 1930, 1965] },
+      legendItems: [
+        ['#7f0000', 'Super-Emitter Plume (> 1965 ppb)'],
+        ['#b30000', 'High (1930–1965)'],
+        ['#d7301f', 'Elevated (1890–1930)'],
+        ['#ef6548', 'Moderate (1850–1890)'],
+        ['#fdbb84', 'Background (< 1850)']
+      ]
+    },
+    hcho: {
+      id: 'hcho',
+      name: 'Formaldehyde (HCHO) Tropospheric Column',
+      shortLabel: 'HCHO',
+      stacProduct: 'L2__HCHO__',
+      assetKey: 'hcho',
+      h5Var: 'PRODUCT/formaldehyde_tropospheric_vertical_column',
+      displayUnit: 'µmol/m²',
+      multiplier: 1e6,
+      minQa: 0.50,
+      scale: { min: 0, max: 300, breaks: [40, 90, 150, 220] },
+      legendItems: [
+        ['#54278f', 'Severe VOC / Pyrolysis (> 220 µmol/m²)'],
+        ['#756bb1', 'High Biogenic/Industrial (150–220)'],
+        ['#9e9ac8', 'Elevated (90–150)'],
+        ['#bcbddc', 'Moderate (40–90)'],
+        ['#dadaeb', 'Background (< 40)']
+      ]
+    },
+    aer_ai: {
+      id: 'aer_ai',
+      name: 'UV Aerosol Index (AER_AI 354/388nm)',
+      shortLabel: 'UVAI',
+      stacProduct: 'L2__AER_AI',
+      assetKey: 'aer-ai',
+      h5Var: 'PRODUCT/aerosol_index_354_388',
+      displayUnit: 'UVAI',
+      multiplier: 1.0,
+      minQa: 0.50,
+      scale: { min: -1.5, max: 4.0, breaks: [-0.2, 0.5, 1.5, 2.5] },
+      legendItems: [
+        ['#7a0177', 'Intense Absorbing Smoke/Dust (> 2.5)'],
+        ['#ae017e', 'Dense Absorbing Aerosol (1.5–2.5)'],
+        ['#f768a1', 'Elevated UVAI (0.5–1.5)'],
+        ['#74a9cf', 'Scattering / Weak Absorbing (-0.2–0.5)'],
+        ['#0570b0', 'Pure Rayleigh / Non-absorbing (< -0.2)']
+      ]
+    }
+  };
+
   // ============================================================================
   // 2. Pure Per-Pixel & Typed-Array Calculation Engine
   // ============================================================================
@@ -400,12 +540,12 @@
   }
 
   // ============================================================================
-  // 4. Sentinel-5P (TROPOMI) Trace-Gas Conversion Helpers
+  // 4. Sentinel-5P (TROPOMI) Trace-Gas Conversion & Swath-to-Grid Engine
   // ============================================================================
 
   /**
    * Converts Sentinel-5P TROPOMI trace-gas column densities between mol/m^2,
-   * molecules/cm^2, and Dobson Units (DU). Useful when loading pre-gridded S5P COGs.
+   * molecules/cm^2, and Dobson Units (DU).
    *
    * - 1 mol/m^2 = 6.02214076e19 molecules/cm^2
    * - 1 mol/m^2 = 2241.15 Dobson Units (DU)
@@ -426,6 +566,280 @@
     if (toUnit === 'molec_cm2') return molM2 * 6.02214076e19;
     if (toUnit === 'du') return molM2 * 2241.15;
     return NaN;
+  }
+
+  let h5wasmLoadingPromise = null;
+
+  /**
+   * Lazy loader for the h5wasm WebAssembly HDF5 library.
+   * Loads the script if not already present and awaits window.h5wasm.ready.
+   *
+   * @returns {Promise<Object>} The initialized window.h5wasm instance
+   */
+  async function ensureH5Wasm() {
+    if (typeof window === 'undefined') {
+      throw new Error('ensureH5Wasm can only be used in a browser environment');
+    }
+    if (window.h5wasm && window.h5wasm.ready) {
+      await window.h5wasm.ready;
+      return window.h5wasm;
+    }
+    if (h5wasmLoadingPromise) return h5wasmLoadingPromise;
+
+    h5wasmLoadingPromise = new Promise((resolve, reject) => {
+      const existingScript = document.querySelector('script[src*="h5wasm"]');
+      if (existingScript && window.h5wasm && window.h5wasm.ready) {
+        window.h5wasm.ready.then(() => resolve(window.h5wasm)).catch(reject);
+        return;
+      }
+      const script = document.createElement('script');
+      script.src = 'https://cdn.jsdelivr.net/npm/h5wasm@0.7.8/dist/iife/h5wasm.js';
+      script.async = true;
+      script.onload = () => {
+        if (!window.h5wasm || !window.h5wasm.ready) {
+          reject(new Error('h5wasm loaded but window.h5wasm.ready was not found'));
+          return;
+        }
+        window.h5wasm.ready.then(() => resolve(window.h5wasm)).catch(reject);
+      };
+      script.onerror = () => reject(new Error('Failed to load h5wasm from CDN'));
+      document.head.appendChild(script);
+    });
+
+    return h5wasmLoadingPromise;
+  }
+
+  /**
+   * Pure client-side reader and gridding engine for Sentinel-5P Level-2 NetCDF/HDF5 swath files.
+   * Uses h5wasm WebAssembly to unpack swath variables, filters footprints by QA and AOI,
+   * and splats them onto a regular WGS84 grid using a Gaussian kernel of radius ~0.065 degrees.
+   *
+   * @param {ArrayBuffer} arrayBuffer - Raw NetCDF4/HDF5 file buffer
+   * @param {string} gasId - Product ID (e.g., 'no2', 'so2', 'co', 'o3', 'ch4', 'hcho', 'aer_ai')
+   * @param {number[]} bbox - [west, south, east, north]
+   * @param {number} [gridWidth=180] - Output grid width
+   * @param {number} [gridHeight=180] - Output grid height
+   * @returns {Promise<Object>} Gridded result containing { indexGrid, width, height, bbox, gasId, mean, min, max, validCells, matchedFootprints, displayUnit, multiplier }
+   */
+  async function gridS5pNetCdfBuffer(arrayBuffer, gasId, bbox, gridWidth = 180, gridHeight = 180) {
+    const productDef = S5P_PRODUCTS[gasId];
+    if (!productDef) {
+      throw new Error(`Unsupported Sentinel-5P product ID: "${gasId}"`);
+    }
+
+    const h5wasm = await ensureH5Wasm();
+    const tempFilename = `s5p_${gasId}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}.nc`;
+    const FS = h5wasm.FS;
+    FS.writeFile(tempFilename, new Uint8Array(arrayBuffer));
+
+    let f = null;
+    try {
+      f = new h5wasm.File(tempFilename, 'r');
+
+      const getDatasetValues = (path) => {
+        const node = f.get(path);
+        if (!node) throw new Error(`NetCDF dataset path not found: ${path}`);
+        const data = node.value;
+        const attrs = node.attrs || {};
+        return { data, attrs, node };
+      };
+
+      const latObj = getDatasetValues('PRODUCT/latitude');
+      const lonObj = getDatasetValues('PRODUCT/longitude');
+      const qaObj = getDatasetValues('PRODUCT/qa_value');
+      const gasObj = getDatasetValues(productDef.h5Var);
+
+      const lats = latObj.data;
+      const lons = lonObj.data;
+      const qas = qaObj.data;
+      const vals = gasObj.data;
+
+      // Handle QA scale factor if needed (normalize byte QA [0, 100] to [0.0, 1.0])
+      let qaScale = 1.0;
+      if (qaObj.attrs && qaObj.attrs.scale_factor) {
+        const sf = qaObj.attrs.scale_factor.value;
+        if (Number.isFinite(sf) && sf > 0 && sf < 1.0) qaScale = sf;
+      }
+
+      const [west, south, east, north] = bbox;
+      const margin = 0.12;
+      const minLon = west - margin, maxLon = east + margin;
+      const minLat = south - margin, maxLat = north + margin;
+
+      const totalCells = gridWidth * gridHeight;
+      const outGrid = new Float32Array(totalCells);
+      const weightGrid = new Float32Array(totalCells);
+
+      const lonSpan = east - west;
+      const latSpan = north - south;
+      const dLon = lonSpan / gridWidth;
+      const dLat = latSpan / gridHeight;
+
+      // TROPOMI footprints are ~3.5 x 5.5 km (~0.06 deg).
+      // We splat with a Gaussian kernel of radius ~0.065 degrees.
+      const splatRadiusDeg = 0.065;
+      const splatRadiusX = Math.max(1, Math.ceil(splatRadiusDeg / Math.abs(dLon || 0.01)));
+      const splatRadiusY = Math.max(1, Math.ceil(splatRadiusDeg / Math.abs(dLat || 0.01)));
+      const invR2 = 1.0 / (splatRadiusDeg * splatRadiusDeg);
+
+      let matchedFootprints = 0;
+      const numFootprints = vals.length;
+
+      for (let i = 0; i < numFootprints; i++) {
+        const vRaw = vals[i];
+        if (!Number.isFinite(vRaw) || Math.abs(vRaw) > 1e30 || vRaw <= -999) continue;
+
+        let qa = qas[i] * qaScale;
+        if (qa > 1.5) qa *= 0.01;
+        if (qa < productDef.minQa) continue;
+
+        const lat = lats[i];
+        const lon = lons[i];
+        if (!Number.isFinite(lat) || !Number.isFinite(lon)) continue;
+        if (lon < minLon || lon > maxLon || lat < minLat || lat > maxLat) continue;
+
+        matchedFootprints++;
+        const scaledVal = vRaw * productDef.multiplier;
+
+        // Map lon/lat to floating point grid cell coordinates
+        const gx = ((lon - west) / lonSpan) * gridWidth;
+        const gy = ((north - lat) / latSpan) * gridHeight;
+
+        const minGx = Math.max(0, Math.floor(gx - splatRadiusX));
+        const maxGx = Math.min(gridWidth - 1, Math.ceil(gx + splatRadiusX));
+        const minGy = Math.max(0, Math.floor(gy - splatRadiusY));
+        const maxGy = Math.min(gridHeight - 1, Math.ceil(gy + splatRadiusY));
+
+        for (let y = minGy; y <= maxGy; y++) {
+          const cellLat = north - (y + 0.5) * dLat;
+          const dy = cellLat - lat;
+          for (let x = minGx; x <= maxGx; x++) {
+            const cellLon = west + (x + 0.5) * dLon;
+            const dx = cellLon - lon;
+            const dist2 = dx * dx + dy * dy;
+            const normDist2 = dist2 * invR2;
+            if (normDist2 <= 2.25) { // within 1.5 sigma
+              const w = Math.exp(-normDist2 * 2.5);
+              const idx = y * gridWidth + x;
+              outGrid[idx] += scaledVal * w;
+              weightGrid[idx] += w;
+            }
+          }
+        }
+      }
+
+      let validCells = 0;
+      let sum = 0, min = Infinity, max = -Infinity;
+
+      for (let i = 0; i < totalCells; i++) {
+        const w = weightGrid[i];
+        if (w > 1e-4) {
+          const val = outGrid[i] / w;
+          outGrid[i] = val;
+          validCells++;
+          sum += val;
+          if (val < min) min = val;
+          if (val > max) max = val;
+        } else {
+          outGrid[i] = NaN;
+        }
+      }
+
+      return {
+        gasId,
+        productDef,
+        bbox: bbox.slice(),
+        width: gridWidth,
+        height: gridHeight,
+        indexGrid: outGrid,
+        validCells,
+        matchedFootprints,
+        mean: validCells > 0 ? sum / validCells : NaN,
+        min: validCells > 0 ? min : NaN,
+        max: validCells > 0 ? max : NaN,
+        displayUnit: productDef.displayUnit,
+        multiplier: productDef.multiplier
+      };
+    } finally {
+      if (f) {
+        try { f.close(); } catch (_) {}
+      }
+      try { FS.unlink(tempFilename); } catch (_) {}
+    }
+  }
+
+  /**
+   * Searches the Microsoft Planetary Computer STAC catalog for Sentinel-5P Level-2 NetCDF orbits.
+   *
+   * @param {number[]} bbox - [west, south, east, north]
+   * @param {string} gasId - Product ID key in S5P_PRODUCTS
+   * @param {string} startDate - YYYY-MM-DD
+   * @param {string} endDate - YYYY-MM-DD
+   * @param {number} [limit=50]
+   * @returns {Promise<Array>} Array of STAC features matching the product and AOI
+   */
+  async function searchS5pStac(bbox, gasId, startDate, endDate, limit = 50) {
+    const productDef = S5P_PRODUCTS[gasId];
+    if (!productDef) throw new Error(`Unknown Sentinel-5P product: ${gasId}`);
+
+    const startIso = startDate.includes('T') ? startDate : `${startDate}T00:00:00Z`;
+    const endIso = endDate.includes('T') ? endDate : `${endDate}T23:59:59Z`;
+
+    const body = {
+      collections: ['sentinel-5p-l2-netcdf'],
+      bbox: bbox,
+      datetime: `${startIso}/${endIso}`,
+      query: {
+        's5p:product_name': { eq: productDef.stacProduct }
+      },
+      limit: limit
+    };
+
+    const res = await fetch('https://planetarycomputer.microsoft.com/api/stac/v1/search', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+
+    if (!res.ok) {
+      throw new Error(`Planetary Computer STAC search failed (HTTP ${res.status}): ${await res.text()}`);
+    }
+
+    const data = await res.json();
+    const features = (data.features || []).filter(feat => {
+      return Boolean(feat.assets && feat.assets[productDef.assetKey] && feat.assets[productDef.assetKey].href);
+    });
+
+    // Sort newest first
+    features.sort((a, b) => {
+      const ta = new Date(a.properties.datetime || a.id).getTime();
+      const tb = new Date(b.properties.datetime || b.id).getTime();
+      return tb - ta;
+    });
+
+    return features;
+  }
+
+  /**
+   * Signs a Planetary Computer asset URL using the SAS signing API and fetches its ArrayBuffer.
+   *
+   * @param {string} rawHref - Planetary Computer raw blob URL
+   * @returns {Promise<ArrayBuffer>}
+   */
+  async function signAndFetchS5pBuffer(rawHref) {
+    const signUrl = `https://planetarycomputer.microsoft.com/api/sas/v1/sign?href=${encodeURIComponent(rawHref)}`;
+    const signRes = await fetch(signUrl);
+    if (!signRes.ok) {
+      throw new Error(`Planetary Computer SAS signing failed (HTTP ${signRes.status})`);
+    }
+    const signedData = await signRes.json();
+    const signedHref = signedData.href || rawHref;
+
+    const dataRes = await fetch(signedHref);
+    if (!dataRes.ok) {
+      throw new Error(`Failed to fetch Sentinel-5P NetCDF data (HTTP ${dataRes.status})`);
+    }
+    return dataRes.arrayBuffer();
   }
 
   // ============================================================================
@@ -499,6 +913,63 @@
         if (val < 55) return [240, 130, 45, 235];    // Unhealthy for Sensitive Groups
         if (val < 100) return [195, 35, 45, 240];    // Unhealthy
         return [125, 20, 95, 245];                   // Very Unhealthy / Hazardous
+
+      // Sentinel-5P TROPOMI trace gas products
+      case 'no2':
+        // breaks: [15, 35, 65, 100]
+        if (val < 15) return [254, 204, 92, 220];    // #fecc5c Low / Background
+        if (val < 35) return [253, 141, 60, 230];    // #fd8d3c Moderate
+        if (val < 65) return [227, 26, 28, 235];     // #e31a1c Elevated
+        if (val < 100) return [189, 0, 38, 240];     // #bd0026 High
+        return [128, 0, 38, 245];                    // #800026 Severe
+
+      case 'so2':
+        // breaks: [50, 120, 250, 400]
+        if (val < 50) return [252, 197, 192, 215];   // #fcc5c0 Background
+        if (val < 120) return [247, 104, 161, 230];  // #f768a1 Moderate
+        if (val < 250) return [174, 1, 126, 235];    // #ae017e Elevated
+        if (val < 400) return [122, 1, 119, 240];    // #7a0177 Heavy Plume
+        return [73, 0, 106, 245];                    // #49006a Volcanic / Extreme
+
+      case 'co':
+        // breaks: [22, 30, 38, 48]
+        if (val < 22) return [252, 146, 114, 215];   // #fc9272 Clean Column
+        if (val < 30) return [251, 106, 74, 230];    // #fb6a4a Low-Moderate
+        if (val < 38) return [239, 59, 44, 235];     // #ef3b2c Moderate
+        if (val < 48) return [165, 15, 21, 240];     // #a50f15 Elevated
+        return [103, 0, 13, 245];                    // #67000d Dense Combustion
+
+      case 'o3':
+        // breaks: [260, 300, 340, 380]
+        if (val < 260) return [107, 174, 214, 220];  // #6baed6 Depleted
+        if (val < 300) return [66, 146, 198, 230];   // #4292c6 Low Column
+        if (val < 340) return [33, 113, 181, 235];   // #2171b5 Typical Column
+        if (val < 380) return [8, 81, 156, 240];     // #08519c Above Normal
+        return [8, 48, 107, 245];                    // #08306b High Column
+
+      case 'ch4':
+        // breaks: [1850, 1890, 1930, 1965]
+        if (val < 1850) return [253, 187, 132, 220]; // #fdbb84 Background
+        if (val < 1890) return [239, 101, 72, 230];  // #ef6548 Moderate
+        if (val < 1930) return [215, 48, 31, 235];   // #d7301f Elevated
+        if (val < 1965) return [179, 0, 0, 240];     // #b30000 High
+        return [127, 0, 0, 245];                     // #7f0000 Super-Emitter Plume
+
+      case 'hcho':
+        // breaks: [40, 90, 150, 220]
+        if (val < 40) return [218, 218, 235, 215];   // #dadaeb Background
+        if (val < 90) return [188, 189, 220, 230];   // #bcbddc Moderate
+        if (val < 150) return [158, 154, 200, 235];  // #9e9ac8 Elevated
+        if (val < 220) return [117, 107, 177, 240];  // #756bb1 High
+        return [84, 39, 143, 245];                   // #54278f Severe VOC
+
+      case 'aer_ai':
+        // breaks: [-0.2, 0.5, 1.5, 2.5]
+        if (val < -0.2) return [5, 112, 176, 220];   // #0570b0 Pure Rayleigh
+        if (val < 0.5) return [116, 169, 207, 230];  // #74a9cf Scattering
+        if (val < 1.5) return [247, 104, 161, 235];  // #f768a1 Elevated UVAI
+        if (val < 2.5) return [174, 1, 126, 240];    // #ae017e Dense Absorbing Aerosol
+        return [122, 1, 119, 245];                   // #7a0177 Intense Absorbing Smoke/Dust
 
       default:
         return [0, 0, 0, 0];
@@ -671,16 +1142,344 @@
       }
     }
 
+    // 8. Wire Sentinel-5P (TROPOMI) Trace Gas Explorer panel in index.html
+    if (typeof document !== 'undefined') {
+      const s5pGasSelect = document.getElementById('s5pGasSelect');
+      const s5pSceneSelect = document.getElementById('s5pSceneSelect');
+      const s5pSearchBtn = document.getElementById('s5pSearchBtn');
+      const s5pRenderBtn = document.getElementById('s5pRenderBtn');
+      const s5pClearBtn = document.getElementById('s5pClearBtn');
+      const s5pExportTiffBtn = document.getElementById('s5pExportTiffBtn');
+      const s5pStatus = document.getElementById('s5pStatus');
+      const s5pLegend = document.getElementById('s5pLegend');
+      const s5pLocalFileInput = document.getElementById('s5pLocalFileInput');
+      const s5pRenderLocalBtn = document.getElementById('s5pRenderLocalBtn');
+
+      if (s5pGasSelect && !s5pGasSelect._aqInit) {
+        s5pGasSelect._aqInit = true;
+        s5pGasSelect.innerHTML = '';
+        for (const [key, p] of Object.entries(S5P_PRODUCTS)) {
+          const opt = document.createElement('option');
+          opt.value = key;
+          opt.textContent = `${p.shortLabel} — ${p.name} (${p.displayUnit})`;
+          s5pGasSelect.appendChild(opt);
+        }
+      }
+
+      let activeS5pOverlay = null;
+      let activeS5pGridded = null;
+      let s5pFeatures = [];
+
+      function clearS5p() {
+        const mapInst = (typeof host.map !== 'undefined' && host.map) ? host.map : (typeof window !== 'undefined' ? window.map : null);
+        if (activeS5pOverlay && mapInst && mapInst.hasLayer(activeS5pOverlay)) {
+          mapInst.removeLayer(activeS5pOverlay);
+        }
+        activeS5pOverlay = null;
+        activeS5pGridded = null;
+        if (s5pClearBtn) s5pClearBtn.disabled = true;
+        if (s5pExportTiffBtn) s5pExportTiffBtn.disabled = true;
+        if (s5pLegend) {
+          s5pLegend.style.display = 'none';
+          s5pLegend.innerHTML = '';
+        }
+        if (s5pStatus) s5pStatus.textContent = 'S5P overlay cleared.';
+      }
+
+      function renderS5pLegend(gasId, gridded) {
+        if (!s5pLegend) return;
+        const p = S5P_PRODUCTS[gasId];
+        if (!p) return;
+        const meanStr = Number.isFinite(gridded?.mean) ? gridded.mean.toFixed(2) : '—';
+        const minStr = Number.isFinite(gridded?.min) ? gridded.min.toFixed(2) : '—';
+        const maxStr = Number.isFinite(gridded?.max) ? gridded.max.toFixed(2) : '—';
+        const matched = gridded?.matchedFootprints ?? 0;
+
+        let html = `<div style="font-weight:650;margin-bottom:6px;color:#4daafc;">Sentinel-5P ${p.shortLabel} (${p.name})</div>`;
+        html += `<div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:8px;font-size:11.5px;color:#ccc;">`;
+        html += `<span>Mean: <strong>${meanStr} ${p.displayUnit}</strong></span>`;
+        html += `<span>Range: [${minStr}, ${maxStr}]</span>`;
+        html += `<span>TROPOMI Footprints: ${matched}</span>`;
+        html += `<span>Filter: <code>qa_value &ge; ${p.minQa.toFixed(2)}</code></span>`;
+        html += `</div>`;
+        html += `<div style="display:flex;gap:6px;flex-wrap:wrap;">`;
+        for (const [col, lbl] of p.legendItems) {
+          html += `<div style="display:flex;align-items:center;margin-right:8px;font-size:11px;">`;
+          html += `<div style="width:12px;height:12px;background:${col};margin-right:5px;border:1px solid #777;border-radius:2px;"></div>`;
+          html += `<span>${lbl}</span></div>`;
+        }
+        html += `</div>`;
+        s5pLegend.innerHTML = html;
+        s5pLegend.style.display = 'block';
+      }
+
+      function displayGriddedS5p(gridded, sceneDateStr) {
+        const mapInst = (typeof host.map !== 'undefined' && host.map) ? host.map : (typeof window !== 'undefined' ? window.map : null);
+        if (!mapInst) throw new Error('Leaflet map instance is unavailable');
+
+        if (activeS5pOverlay && mapInst.hasLayer(activeS5pOverlay)) {
+          mapInst.removeLayer(activeS5pOverlay);
+        }
+
+        const [west, south, east, north] = gridded.bbox;
+        const w = gridded.width, h = gridded.height;
+        const c = document.createElement('canvas');
+        c.width = w;
+        c.height = h;
+        const ctx = c.getContext('2d');
+        const imgData = ctx.createImageData(w, h);
+
+        for (let idx = 0; idx < w * h; idx++) {
+          const val = gridded.indexGrid[idx];
+          const rgba = colorizeAqMetric(val, gridded.gasId, false);
+          const p = idx * 4;
+          imgData.data[p] = rgba[0];
+          imgData.data[p + 1] = rgba[1];
+          imgData.data[p + 2] = rgba[2];
+          imgData.data[p + 3] = rgba[3];
+        }
+        ctx.putImageData(imgData, 0, 0);
+
+        const dataUrl = c.toDataURL();
+        const opacitySlider = document.getElementById('opacitySlider');
+        const opVal = opacitySlider ? Number(opacitySlider.value) : 0.88;
+
+        const bounds = L.latLngBounds([[south, west], [north, east]]);
+        activeS5pOverlay = L.imageOverlay(dataUrl, bounds, {
+          opacity: opVal,
+          pane: 's5pPane'
+        }).addTo(mapInst);
+
+        activeS5pGridded = gridded;
+        activeS5pGridded.sceneDateStr = sceneDateStr;
+
+        if (s5pClearBtn) s5pClearBtn.disabled = false;
+        if (s5pExportTiffBtn) s5pExportTiffBtn.disabled = false;
+        renderS5pLegend(gridded.gasId, gridded);
+      }
+
+      if (s5pClearBtn) {
+        s5pClearBtn.addEventListener('click', clearS5p);
+      }
+
+      if (s5pSearchBtn) {
+        s5pSearchBtn.addEventListener('click', async () => {
+          const bbox = (typeof host.drawnBbox !== 'undefined' && host.drawnBbox) ? host.drawnBbox : (typeof window !== 'undefined' ? window.drawnBbox : null);
+          if (!bbox) {
+            if (s5pStatus) s5pStatus.textContent = 'Draw an AOI rectangle on the map first.';
+            return;
+          }
+          const gasId = s5pGasSelect ? s5pGasSelect.value : 'no2';
+          const startDate = document.getElementById('startDate')?.value || '2023-01-01';
+          const endDate = document.getElementById('endDate')?.value || '2023-12-31';
+
+          s5pSearchBtn.disabled = true;
+          if (s5pStatus) s5pStatus.textContent = `Searching Planetary Computer for S5P ${gasId.toUpperCase()} orbits over AOI...`;
+
+          try {
+            s5pFeatures = await searchS5pStac(bbox, gasId, startDate, endDate, 50);
+            if (!s5pFeatures || s5pFeatures.length === 0) {
+              if (s5pStatus) s5pStatus.textContent = `No Sentinel-5P ${gasId.toUpperCase()} acquisitions found in this AOI and date range.`;
+              if (s5pSceneSelect) {
+                s5pSceneSelect.innerHTML = '<option value="">No matching orbits found</option>';
+                s5pSceneSelect.disabled = true;
+              }
+              if (s5pRenderBtn) s5pRenderBtn.disabled = true;
+              return;
+            }
+
+            if (s5pSceneSelect) {
+              s5pSceneSelect.innerHTML = '';
+              s5pFeatures.forEach((feat, idx) => {
+                const opt = document.createElement('option');
+                opt.value = String(idx);
+                const dt = feat.properties.datetime ? feat.properties.datetime.replace('T', ' ').substring(0, 19) : feat.id;
+                opt.textContent = `${dt} (${feat.id.substring(0, 24)}…)`;
+                s5pSceneSelect.appendChild(opt);
+              });
+              s5pSceneSelect.disabled = false;
+            }
+            if (s5pRenderBtn) s5pRenderBtn.disabled = false;
+            if (s5pStatus) s5pStatus.textContent = `Found ${s5pFeatures.length} S5P orbit(s). Click "Load & Grid Gas Map" to download and rasterize.`;
+          } catch (err) {
+            if (s5pStatus) s5pStatus.textContent = `Search error: ${err.message}`;
+          } finally {
+            s5pSearchBtn.disabled = false;
+          }
+        });
+      }
+
+      if (s5pRenderBtn) {
+        s5pRenderBtn.addEventListener('click', async () => {
+          const bbox = (typeof host.drawnBbox !== 'undefined' && host.drawnBbox) ? host.drawnBbox : (typeof window !== 'undefined' ? window.drawnBbox : null);
+          if (!bbox) {
+            if (s5pStatus) s5pStatus.textContent = 'Draw an AOI rectangle on the map first.';
+            return;
+          }
+          const featIdx = s5pSceneSelect ? Number(s5pSceneSelect.value) : 0;
+          const feat = s5pFeatures[featIdx];
+          const gasId = s5pGasSelect ? s5pGasSelect.value : 'no2';
+          const p = S5P_PRODUCTS[gasId];
+          if (!feat || !p) return;
+
+          const rawHref = feat.assets[p.assetKey]?.href;
+          if (!rawHref) {
+            if (s5pStatus) s5pStatus.textContent = `Asset "${p.assetKey}" missing from selected scene.`;
+            return;
+          }
+
+          s5pRenderBtn.disabled = true;
+          if (s5pStatus) s5pStatus.textContent = `Signing and downloading S5P ${gasId.toUpperCase()} NetCDF swath...`;
+
+          try {
+            const buf = await signAndFetchS5pBuffer(rawHref);
+            if (s5pStatus) s5pStatus.textContent = `Unpacking swath via h5wasm WebAssembly and splatting ${gasId.toUpperCase()} grid...`;
+            const gridded = await gridS5pNetCdfBuffer(buf, gasId, bbox, 180, 180);
+
+            const dt = feat.properties.datetime ? feat.properties.datetime.substring(0, 10) : 'S5P';
+            displayGriddedS5p(gridded, dt);
+            if (s5pStatus) {
+              s5pStatus.textContent = `Rendered S5P ${gasId.toUpperCase()}: ${gridded.matchedFootprints} valid footprints, mean = ${gridded.mean.toFixed(2)} ${gridded.displayUnit}.`;
+            }
+          } catch (err) {
+            if (s5pStatus) s5pStatus.textContent = `Gridding error: ${err.message}`;
+          } finally {
+            s5pRenderBtn.disabled = false;
+          }
+        });
+      }
+
+      if (s5pRenderLocalBtn && s5pLocalFileInput) {
+        s5pRenderLocalBtn.addEventListener('click', async () => {
+          const bbox = (typeof host.drawnBbox !== 'undefined' && host.drawnBbox) ? host.drawnBbox : (typeof window !== 'undefined' ? window.drawnBbox : null);
+          if (!bbox) {
+            if (s5pStatus) s5pStatus.textContent = 'Draw an AOI rectangle on the map first.';
+            return;
+          }
+          const file = s5pLocalFileInput.files?.[0];
+          if (!file) {
+            if (s5pStatus) s5pStatus.textContent = 'Please choose a local .nc / .h5 file first.';
+            return;
+          }
+          const gasId = s5pGasSelect ? s5pGasSelect.value : 'no2';
+
+          s5pRenderLocalBtn.disabled = true;
+          if (s5pStatus) s5pStatus.textContent = `Reading local file "${file.name}"...`;
+
+          try {
+            const arrayBuffer = await file.arrayBuffer();
+            if (s5pStatus) s5pStatus.textContent = `Gridding local NetCDF file over AOI with h5wasm...`;
+            const gridded = await gridS5pNetCdfBuffer(arrayBuffer, gasId, bbox, 180, 180);
+            displayGriddedS5p(gridded, file.name);
+            if (s5pStatus) {
+              s5pStatus.textContent = `Rendered local S5P ${gasId.toUpperCase()}: ${gridded.matchedFootprints} footprints, mean = ${gridded.mean.toFixed(2)} ${gridded.displayUnit}.`;
+            }
+          } catch (err) {
+            if (s5pStatus) s5pStatus.textContent = `Local file error: ${err.message}`;
+          } finally {
+            s5pRenderLocalBtn.disabled = false;
+          }
+        });
+      }
+
+      if (s5pExportTiffBtn) {
+        s5pExportTiffBtn.addEventListener('click', async () => {
+          if (!activeS5pGridded) {
+            if (s5pStatus) s5pStatus.textContent = 'Load and grid an S5P gas map first.';
+            return;
+          }
+          if (typeof GeoTIFF === 'undefined' || typeof GeoTIFF.writeArrayBuffer !== 'function') {
+            if (s5pStatus) s5pStatus.textContent = 'GeoTIFF.writeArrayBuffer is not available in this browser environment.';
+            return;
+          }
+
+          s5pExportTiffBtn.disabled = true;
+          const origText = s5pExportTiffBtn.textContent;
+          s5pExportTiffBtn.textContent = 'Writing GeoTIFF…';
+
+          try {
+            const { indexGrid, width, height, bbox, gasId, sceneDateStr } = activeS5pGridded;
+            const [west, south, east, north] = bbox;
+            const pixelScaleX = (east - west) / width;
+            const pixelScaleY = (north - south) / height;
+
+            const exportGridClean = new Float32Array(indexGrid.length);
+            for (let i = 0; i < indexGrid.length; i++) {
+              exportGridClean[i] = Number.isNaN(indexGrid[i]) ? -9999 : indexGrid[i];
+            }
+
+            const metadata = {
+              width,
+              height,
+              ModelPixelScale: [pixelScaleX, pixelScaleY, 0],
+              ModelTiepoint: [0, 0, 0, west, north, 0],
+              GTModelTypeGeoKey: 2, // Geographic (lat/lon)
+              GeographicTypeGeoKey: 4326,
+              GDAL_NODATA: '-9999',
+              ImageDescription: `Sentinel-5P Level-2 ${gasId.toUpperCase()} Gridded Tropospheric Column; date=${sceneDateStr || ''}; unit=${activeS5pGridded.displayUnit}`
+            };
+
+            const tiffBuf = await GeoTIFF.writeArrayBuffer(exportGridClean, metadata);
+            const blob = new Blob([tiffBuf], { type: 'image/tiff' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `s5p_${gasId}_${(sceneDateStr || 'gas').replace(/[^a-z0-9_-]/gi, '_')}.tif`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+
+            if (s5pStatus) s5pStatus.textContent = `Exported EPSG:4326 Float32 GeoTIFF (${width}x${height}).`;
+          } catch (err) {
+            if (s5pStatus) s5pStatus.textContent = `GeoTIFF export error: ${err.message}`;
+          } finally {
+            s5pExportTiffBtn.disabled = false;
+            s5pExportTiffBtn.textContent = origText;
+          }
+        });
+      }
+
+      // Map hover inspection hook for live trace gas readings
+      const mapInst = (typeof host.map !== 'undefined' && host.map) ? host.map : (typeof window !== 'undefined' ? window.map : null);
+      if (mapInst && !mapInst._s5pHoverHooked) {
+        mapInst._s5pHoverHooked = true;
+        mapInst.on('mousemove', (e) => {
+          if (!activeS5pGridded) return;
+          const { lat, lng } = e.latlng;
+          const [west, south, east, north] = activeS5pGridded.bbox;
+          if (lng < west || lng > east || lat < south || lat > north) return;
+
+          const gx = Math.floor(((lng - west) / (east - west)) * activeS5pGridded.width);
+          const gy = Math.floor(((north - lat) / (north - south)) * activeS5pGridded.height);
+          if (gx < 0 || gx >= activeS5pGridded.width || gy < 0 || gy >= activeS5pGridded.height) return;
+
+          const val = activeS5pGridded.indexGrid[gy * activeS5pGridded.width + gx];
+          const inspectorEl = document.getElementById('inspectorText');
+          if (inspectorEl) {
+            const p = S5P_PRODUCTS[activeS5pGridded.gasId];
+            const valStr = Number.isFinite(val) ? `${val.toFixed(2)} ${p?.displayUnit || ''}` : 'NoData';
+            inspectorEl.textContent += ` | S5P ${activeS5pGridded.gasId.toUpperCase()}: ${valStr}`;
+          }
+        });
+      }
+    }
+
     return true;
   }
 
   return {
     AQ_METRICS,
+    S5P_PRODUCTS,
     calculateAqPixel,
     normalizeSen2CorAtmosphericGrid,
     computeMetricGrid,
     diagnoseAirQualityGrid,
     convertTraceGasUnits,
+    ensureH5Wasm,
+    gridS5pNetCdfBuffer,
+    searchS5pStac,
+    signAndFetchS5pBuffer,
     colorizeAqMetric,
     registerWithSentiApp
   };

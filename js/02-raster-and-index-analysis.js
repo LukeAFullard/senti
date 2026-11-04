@@ -278,8 +278,10 @@
   }
 
   if (typeof window !== 'undefined') {
+    window.getAssetBandInfo = getAssetBandInfo;
     window.getNativeResolution = getNativeResolution;
     window.calculateIndexValue = calculateIndexValue;
+    window.log = log;
   }
 
   function calculateIndexValue(mode, bands) {

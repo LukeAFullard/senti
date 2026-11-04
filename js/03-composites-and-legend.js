@@ -408,6 +408,9 @@
     nsmi: { min: -1, max: 1, breaks: [-0.3, -0.1, 0.1, 0.3] },
     str: { min: 0, max: 6, breaks: [0.8, 1.5, 2.5, 4] }
   };
+  if (typeof window !== 'undefined') {
+    window.COLOR_STRETCH_SCALES = COLOR_STRETCH_SCALES;
+  }
   const legendStretchByMode = new Map();
 
   function legendStepForMode(mode) {

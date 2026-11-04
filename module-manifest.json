@@ -42,6 +42,10 @@
     {
       "path": "js/10-radar-rendering-and-comparison.js",
       "responsibility": "Radar rendering, optical-radar comparison and radar UI event handlers"
+    },
+    {
+      "path": "js/11-air-quality-module.js",
+      "responsibility": "Air quality remote sensing metrics, Sen2Cor DDV fallback diagnostics, and atmospheric index calculations"
     }
   ],
   "status": "phase-1 extraction; shared global scope remains"

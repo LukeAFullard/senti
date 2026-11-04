@@ -261,6 +261,9 @@
     turbidity_ratio: { bands: ['red', 'green'], formula: 'ratio' },
     awei_nsh: { bands: ['green', 'swir16', 'nir', 'swir22'], formula: 'awei_nsh' }
   };
+  if (typeof window !== 'undefined') {
+    window.INDEX_DEFS = INDEX_DEFS;
+  }
 
   function getBandAsset(assets, key) {
     return assets && assets[key] ? assets[key] : null;

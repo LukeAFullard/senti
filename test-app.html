@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Air Quality Remote Sensing Test App</title>
+  <style>
+    :root {
+      --bg: #1a1e24;
+      --card-bg: #232931;
+      --accent: #4daafc;
+      --text: #e0e6ed;
+      --text-muted: #95a3b3;
+      --border: #333d4b;
+      --warning: #ffb84d;
+      --danger: #ff5c5c;
+      --success: #4cd964;
+    }
+    body {
+      margin: 0;
+      padding: 24px;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+    }
+    h1 {
+      margin-top: 0;
+      font-size: 24px;
+      color: #fff;
+    }
+    p.lead {
+      color: var(--text-muted);
+      margin-bottom: 24px;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
+      gap: 20px;
+    }
+    .card {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 18px;
+    }
+    .card h2 {
+      margin-top: 0;
+      font-size: 18px;
+      color: var(--accent);
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 8px;
+    }
+    label {
+      display: block;
+      font-size: 13px;
+      color: var(--text-muted);
+      margin-top: 10px;
+      margin-bottom: 4px;
+    }
+    select, input, button {
+      width: 100%;
+      box-sizing: border-box;
+      padding: 8px 12px;
+      background: #15181e;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      color: #fff;
+      font-size: 14px;
+    }
+    button {
+      background: #2a5a8c;
+      border-color: #3b7ac2;
+      color: #fff;
+      font-weight: 600;
+      cursor: pointer;
+      margin-top: 14px;
+      transition: background 0.2s;
+    }
+    button:hover {
+      background: #3b7ac2;
+    }
+    pre {
+      background: #111418;
+      padding: 12px;
+      border-radius: 4px;
+      border: 1px solid var(--border);
+      overflow-x: auto;
+      font-size: 13px;
+      line-height: 1.4;
+      color: #79c0ff;
+    }
+    canvas {
+      width: 100%;
+      height: 220px;
+      background: #000;
+      border-radius: 4px;
+      margin-top: 12px;
+      image-rendering: pixelated;
+    }
+    .status-badge {
+      display: inline-block;
+      padding: 4px 8px;
+      border-radius: 4px;
+      font-size: 12px;
+      font-weight: 600;
+      margin-top: 8px;
+    }
+    .badge-warn { background: rgba(255, 184, 77, 0.2); color: var(--warning); border: 1px solid var(--warning); }
+    .badge-ok { background: rgba(76, 217, 100, 0.2); color: var(--success); border: 1px solid var(--success); }
+  </style>
+</head>
+<body>
+
+  <h1>Air Quality Remote Sensing Test Application</h1>
+  <p class="lead">Interactive verification environment for <code>js/11-air-quality-module.js</code>: synthetic scene raster simulation, Sen2Cor DDV fallback diagnostics, and Sentinel-5P unit conversion.</p>
+
+  <div class="grid">
+    <!-- Card 1: Metric Catalog & Pixel Simulator -->
+    <div class="card">
+      <h2>1. Metric Calculation & Color Palette</h2>
+      <label for="metricSelect">Target Air Quality Metric</label>
+      <select id="metricSelect"></select>
+
+      <div id="dynamicInputs"></div>
+
+      <button id="calcPixelBtn">Compute Pixel & Palette</button>
+      <div id="pixelResult" style="margin-top:14px;"></div>
+    </div>
+
+    <!-- Card 2: Synthetic Plume & Fallback Diagnostics -->
+    <div class="card">
+      <h2>2. Raster Simulation & DDV Diagnostics</h2>
+      <label for="simScenario">Simulation Scenario</label>
+      <select id="simScenario">
+        <option value="plume">Wildfire / Industrial Smoke Plume (Elevated AOT & SPDI)</option>
+        <option value="fallback">Arid / Desert / Snow Tile (Sen2Cor DDV Fallback, constant AOT ~0.20)</option>
+        <option value="clean">Clean Oceanic / Coastal Atmosphere (AOT &lt; 0.10)</option>
+      </select>
+
+      <button id="runSimBtn">Simulate &amp; Diagnose Raster</button>
+
+      <canvas id="rasterCanvas" width="128" height="128"></canvas>
+      <pre id="diagOutput">Click "Simulate &amp; Diagnose Raster" to inspect output.</pre>
+    </div>
+
+    <!-- Card 3: Sentinel-5P Unit Conversion -->
+    <div class="card">
+      <h2>3. Sentinel-5P TROPOMI Unit Converter</h2>
+      <label for="convValue">Value to Convert</label>
+      <input type="number" id="convValue" value="0.00015" step="0.00001">
+
+      <label for="convFrom">From Unit</label>
+      <select id="convFrom">
+        <option value="mol_m2">mol/m² (Standard Level-2 Tropospheric Column)</option>
+        <option value="molec_cm2">molecules/cm²</option>
+        <option value="du">Dobson Units (DU)</option>
+      </select>
+
+      <label for="convTo">To Unit</label>
+      <select id="convTo">
+        <option value="du">Dobson Units (DU)</option>
+        <option value="mol_m2">mol/m²</option>
+        <option value="molec_cm2">molecules/cm²</option>
+      </select>
+
+      <button id="runConvBtn">Convert Unit</button>
+      <div id="convResult" style="margin-top:14px;"></div>
+    </div>
+
+    <!-- Card 4: Senti App Registration Hook Verification -->
+    <div class="card">
+      <h2>4. Senti Host Integration Hook Check</h2>
+      <p style="color:var(--text-muted); font-size:13px;">Verifies that calling <code>registerWithSentiApp</code> patches <code>INDEX_DEFS</code>, <code>COLOR_STRETCH_SCALES</code>, resolution lookups, and atmospheric quantification fallbacks.</p>
+      <button id="testRegBtn">Verify Host Registration</button>
+      <pre id="regOutput">Click "Verify Host Registration" to run test.</pre>
+    </div>
+  </div>
+
+  <!-- Load the Air Quality Module -->
+  <script src="./js/11-air-quality-module.js"></script>
+
+  <script>
+    const AQ = window.AirQualityRemoteSensing;
+    const metricSelect = document.getElementById('metricSelect');
+    const dynamicInputs = document.getElementById('dynamicInputs');
+    const calcPixelBtn = document.getElementById('calcPixelBtn');
+    const pixelResult = document.getElementById('pixelResult');
+
+    // Populate metric dropdown
+    for (const [id, def] of Object.entries(AQ.AQ_METRICS)) {
+      const opt = document.createElement('option');
+      opt.value = id;
+      opt.textContent = `${def.shortLabel} — ${def.name}`;
+      metricSelect.appendChild(opt);
+    }
+
+    function renderDynamicInputs() {
+      const def = AQ.AQ_METRICS[metricSelect.value];
+      dynamicInputs.innerHTML = '';
+      def.bands.forEach((b, idx) => {
+        const lbl = document.createElement('label');
+        lbl.textContent = `Band value: ${b.toUpperCase()}`;
+        const inp = document.createElement('input');
+        inp.type = 'number';
+        inp.step = '0.01';
+        inp.value = (b === 'aot' ? 0.35 : b === 'wvp' ? 2.1 : 0.25 + idx * 0.1).toFixed(2);
+        inp.dataset.bandIndex = idx;
+        inp.className = 'band-input';
+        dynamicInputs.appendChild(lbl);
+        dynamicInputs.appendChild(inp);
+      });
+    }
+
+    metricSelect.addEventListener('change', renderDynamicInputs);
+    renderDynamicInputs();
+
+    calcPixelBtn.addEventListener('click', () => {
+      const mode = metricSelect.value;
+      const inps = Array.from(dynamicInputs.querySelectorAll('.band-input'));
+      const bands = inps.map(inp => Number(inp.value));
+      const val = AQ.calculateAqPixel(mode, bands);
+      const rgba = AQ.colorizeAqMetric(val, mode, false);
+      const hex = '#' + [rgba[0], rgba[1], rgba[2]].map(v => v.toString(16).padStart(2, '0')).join('');
+
+      pixelResult.innerHTML = `
+        <div style="display:flex; align-items:center; gap:12px;">
+          <div style="width:36px; height:36px; border-radius:4px; background:${hex}; border:1px solid #fff;"></div>
+          <div>
+            <strong>Calculated value:</strong> ${Number.isFinite(val) ? val.toFixed(4) : 'NaN'}<br>
+            <span style="font-size:12px; color:var(--text-muted);">RGBA: [${rgba.join(', ')}] | Hex: ${hex}</span>
+          </div>
+        </div>
+      `;
+    });
+
+    // Raster simulation and diagnostics
+    const simScenario = document.getElementById('simScenario');
+    const runSimBtn = document.getElementById('runSimBtn');
+    const rasterCanvas = document.getElementById('rasterCanvas');
+    const diagOutput = document.getElementById('diagOutput');
+
+    runSimBtn.addEventListener('click', () => {
+      const scenario = simScenario.value;
+      const w = 128, h = 128;
+      const total = w * h;
+      const aotGrid = new Float32Array(total);
+      const coastalGrid = new Float32Array(total);
+      const swir22Grid = new Float32Array(total);
+
+      for (let y = 0; y < h; y++) {
+        for (let x = 0; x < w; x++) {
+          const idx = y * w + x;
+          const cx = x - w / 2, cy = y - h / 2;
+          const dist = Math.sqrt(cx * cx + cy * cy);
+
+          if (scenario === 'plume') {
+            // Gaussian smoke plume
+            const plume = Math.exp(-dist / 25);
+            aotGrid[idx] = 0.08 + 0.65 * plume;
+            coastalGrid[idx] = 0.15 + 0.35 * plume;
+            swir22Grid[idx] = 0.12 + 0.02 * plume; // Transparent in SWIR
+          } else if (scenario === 'fallback') {
+            // Constant Sen2Cor fallback ~0.20 with negligible noise
+            aotGrid[idx] = 0.20 + (Math.random() - 0.5) * 0.0005;
+            coastalGrid[idx] = 0.25;
+            swir22Grid[idx] = 0.35;
+          } else {
+            // Clean atmosphere
+            aotGrid[idx] = 0.05 + (Math.random() - 0.5) * 0.01;
+            coastalGrid[idx] = 0.08;
+            swir22Grid[idx] = 0.04;
+          }
+        }
+      }
+
+      // Diagnose
+      const diag = AQ.diagnoseAirQualityGrid(aotGrid, 's2_aot');
+
+      // Render to canvas
+      const ctx = rasterCanvas.getContext('2d');
+      const imgData = ctx.createImageData(w, h);
+      for (let i = 0; i < total; i++) {
+        const rgba = AQ.colorizeAqMetric(aotGrid[i], 's2_aot', false);
+        const p = i * 4;
+        imgData.data[p] = rgba[0];
+        imgData.data[p + 1] = rgba[1];
+        imgData.data[p + 2] = rgba[2];
+        imgData.data[p + 3] = rgba[3];
+      }
+      ctx.putImageData(imgData, 0, 0);
+
+      diagOutput.textContent = JSON.stringify(diag, null, 2);
+    });
+
+    // Unit conversion
+    const convValue = document.getElementById('convValue');
+    const convFrom = document.getElementById('convFrom');
+    const convTo = document.getElementById('convTo');
+    const runConvBtn = document.getElementById('runConvBtn');
+    const convResult = document.getElementById('convResult');
+
+    runConvBtn.addEventListener('click', () => {
+      const val = Number(convValue.value);
+      const from = convFrom.value;
+      const to = convTo.value;
+      const res = AQ.convertTraceGasUnits(val, from, to);
+      convResult.innerHTML = `<strong>Result:</strong> ${res.toExponential(5)} ${to}`;
+    });
+
+    // Registration hook verification
+    const testRegBtn = document.getElementById('testRegBtn');
+    const regOutput = document.getElementById('regOutput');
+
+    testRegBtn.addEventListener('click', () => {
+      const mock = {
+        INDEX_DEFS: { ndvi: { bands: ['nir', 'red'], formula: 'nd' } },
+        COLOR_STRETCH_SCALES: { ndvi: { min: -1, max: 1, breaks: [0, 0.5] } },
+        getAssetBandInfo: (asset, fb) => fb,
+        getNativeResolution: () => 10,
+        calculateIndexValue: () => 999,
+        colorizeIndex: () => [0, 0, 0, 0]
+      };
+      AQ.registerWithSentiApp(mock);
+
+      const report = {
+        registeredIndices: Object.keys(mock.INDEX_DEFS),
+        registeredScales: Object.keys(mock.COLOR_STRETCH_SCALES),
+        interceptsAot: mock.calculateIndexValue('s2_aot', [0.35]) === 0.35,
+        preservesNdvi: mock.calculateIndexValue('ndvi', [0.8, 0.2]) === 999,
+        aotScaleFallback: mock.getAssetBandInfo({ href: 'test/aot.tif' }).scale === 0.001
+      };
+      regOutput.textContent = JSON.stringify(report, null, 2);
+    });
+  </script>
+</body>
+</html>

@@ -3,7 +3,11 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Air Quality Remote Sensing Test App</title>
+  <title>Air Quality Remote Sensing Test App & Local Map Viewer</title>
+
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
   <style>
     :root {
       --bg: #1a1e24;
@@ -16,56 +20,66 @@
       --danger: #ff5c5c;
       --success: #4cd964;
     }
+    * { box-sizing: border-box; }
     body {
       margin: 0;
-      padding: 24px;
+      padding: 20px;
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
       background: var(--bg);
       color: var(--text);
     }
+    header {
+      margin-bottom: 20px;
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 14px;
+    }
     h1 {
-      margin-top: 0;
-      font-size: 24px;
+      margin: 0 0 6px 0;
+      font-size: 22px;
       color: #fff;
     }
     p.lead {
       color: var(--text-muted);
-      margin-bottom: 24px;
+      margin: 0;
+      font-size: 14px;
     }
     .grid {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
       gap: 20px;
     }
+    .full-width {
+      grid-column: 1 / -1;
+    }
     .card {
       background: var(--card-bg);
       border: 1px solid var(--border);
       border-radius: 8px;
-      padding: 18px;
+      padding: 16px;
     }
     .card h2 {
       margin-top: 0;
-      font-size: 18px;
+      font-size: 17px;
       color: var(--accent);
       border-bottom: 1px solid var(--border);
       padding-bottom: 8px;
     }
     label {
       display: block;
-      font-size: 13px;
+      font-size: 12.5px;
       color: var(--text-muted);
       margin-top: 10px;
       margin-bottom: 4px;
+      font-weight: 600;
     }
     select, input, button {
       width: 100%;
-      box-sizing: border-box;
       padding: 8px 12px;
       background: #15181e;
       border: 1px solid var(--border);
       border-radius: 4px;
       color: #fff;
-      font-size: 14px;
+      font-size: 13.5px;
     }
     button {
       background: #2a5a8c;
@@ -73,7 +87,7 @@
       color: #fff;
       font-weight: 600;
       cursor: pointer;
-      margin-top: 14px;
+      margin-top: 12px;
       transition: background 0.2s;
     }
     button:hover {
@@ -85,54 +99,198 @@
       border-radius: 4px;
       border: 1px solid var(--border);
       overflow-x: auto;
-      font-size: 13px;
+      font-size: 12px;
       line-height: 1.4;
       color: #79c0ff;
     }
+    #map {
+      height: 380px;
+      width: 100%;
+      border-radius: 6px;
+      border: 1px solid var(--border);
+      background: #111;
+      margin-top: 10px;
+    }
+    .map-controls {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 12px;
+      align-items: end;
+      margin-top: 10px;
+    }
+    .stats-bar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 16px;
+      margin-top: 12px;
+      padding: 10px 14px;
+      background: #15181e;
+      border-radius: 4px;
+      border: 1px solid var(--border);
+      font-size: 13px;
+    }
+    .stat-pill {
+      display: flex;
+      flex-direction: column;
+    }
+    .stat-pill span.label {
+      font-size: 11px;
+      color: var(--text-muted);
+      text-transform: uppercase;
+    }
+    .stat-pill span.val {
+      font-weight: bold;
+      color: #fff;
+      font-size: 14px;
+    }
+    .status-badge {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-size: 12px;
+      font-weight: 600;
+    }
+    .badge-warn { background: rgba(255, 184, 77, 0.2); color: var(--warning); border: 1px solid var(--warning); }
+    .badge-ok { background: rgba(76, 217, 100, 0.2); color: var(--success); border: 1px solid var(--success); }
+    .badge-danger { background: rgba(255, 92, 92, 0.2); color: var(--danger); border: 1px solid var(--danger); }
     canvas {
       width: 100%;
-      height: 220px;
+      height: 200px;
       background: #000;
       border-radius: 4px;
       margin-top: 12px;
       image-rendering: pixelated;
     }
-    .status-badge {
-      display: inline-block;
-      padding: 4px 8px;
-      border-radius: 4px;
-      font-size: 12px;
-      font-weight: 600;
+    .legend-box {
       margin-top: 8px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 11.5px;
+      color: var(--text-muted);
     }
-    .badge-warn { background: rgba(255, 184, 77, 0.2); color: var(--warning); border: 1px solid var(--warning); }
-    .badge-ok { background: rgba(76, 217, 100, 0.2); color: var(--success); border: 1px solid var(--success); }
+    .legend-bar {
+      height: 12px;
+      flex: 1;
+      border-radius: 3px;
+      border: 1px solid #555;
+    }
+    .notice-box {
+      background: rgba(77, 170, 252, 0.1);
+      border: 1px solid rgba(77, 170, 252, 0.3);
+      padding: 10px 14px;
+      border-radius: 6px;
+      margin-bottom: 16px;
+      font-size: 13px;
+      line-height: 1.4;
+    }
   </style>
 </head>
 <body>
 
-  <h1>Air Quality Remote Sensing Test Application</h1>
-  <p class="lead">Interactive verification environment for <code>js/11-air-quality-module.js</code>: synthetic scene raster simulation, Sen2Cor DDV fallback diagnostics, and Sentinel-5P unit conversion.</p>
+  <header>
+    <h1>Air Quality Remote Sensing Test App &amp; Local Area Viewer</h1>
+    <p class="lead">Interactive validation suite for <code>js/11-air-quality-module.js</code> with interactive Local Area Selector, atmospheric mapping, raster simulation, and Sentinel-5P unit conversion.</p>
+  </header>
+
+  <div class="notice-box">
+    <strong>Looking to view live satellite air quality in your local area?</strong>
+    Use Section 1 below to interactively pick a preset region or draw/click a custom bounding box on the map. You can also open the main application (<a href="./index.html" style="color:var(--accent);">index.html</a>), draw a bounding box anywhere on earth, and select <strong>Air Quality / Atmosphere</strong> metrics (AOT, SPDI, PM2.5 proxy, etc.) from the Primary Mode dropdown!
+  </div>
 
   <div class="grid">
-    <!-- Card 1: Metric Catalog & Pixel Simulator -->
+    <!-- Section 1: Local Area Selector & Spatial Air Quality Viewer -->
+    <div class="card full-width">
+      <h2>1. Local Area Selector &amp; Spatial Air Quality Viewer</h2>
+      <p style="color:var(--text-muted); font-size:13px; margin:0 0 10px 0;">
+        Choose a preset local monitoring area or interactively select any custom area on the map. The module will simulate and render high-resolution atmospheric layers (Aerosol Optical Thickness, Smoke/Plume Index, or PM2.5 Screening Proxy) directly onto the selected local bounding box.
+      </p>
+
+      <div class="map-controls">
+        <div>
+          <label for="areaPreset">Local Monitoring Area Preset</label>
+          <select id="areaPreset">
+            <option value="la">Los Angeles Basin, USA (Urban / Coastal Smog)</option>
+            <option value="delhi">New Delhi / NCR, India (Severe Winter Inversion / Smoke)</option>
+            <option value="po">Po Valley, Milan, Italy (Topographical Smog Basin)</option>
+            <option value="campfire">Paradise / Butte County, USA (Wildfire Smoke Plume)</option>
+            <option value="custom">-- Custom Map Bounding Box --</option>
+          </select>
+        </div>
+        <div>
+          <label for="mapMetric">Air Quality Layer</label>
+          <select id="mapMetric">
+            <option value="s2_aot">S2-AOT (Aerosol Optical Thickness @ 550nm)</option>
+            <option value="spdi">SPDI (Smoke / Plume Dispersion Index)</option>
+            <option value="pm25_proxy">PM2.5 Screening Proxy (Calibrated μg/m³)</option>
+            <option value="asi">ASI (Aerosol &amp; Smog Index)</option>
+            <option value="ngai">NGAI (Nitrogen Dioxide / Trace Gas Proxy)</option>
+            <option value="cdi">CDI (Cirrus &amp; Dust Index)</option>
+          </select>
+        </div>
+        <div>
+          <label for="layerOpacity">Overlay Opacity: <span id="opacityVal">85</span>%</label>
+          <input type="range" id="layerOpacity" min="10" max="100" value="85">
+        </div>
+        <div>
+          <button id="renderAreaBtn" type="button">Render Local Area Layer</button>
+        </div>
+      </div>
+
+      <div id="map"></div>
+
+      <div class="legend-box">
+        <span id="legendMinLabel">Low</span>
+        <div id="legendGradient" class="legend-bar" style="background:linear-gradient(90deg, #104e8b, #00ced1, #7fff00, #ffff00, #ff8c00, #ff0000, #8b0000);"></div>
+        <span id="legendMaxLabel">High</span>
+      </div>
+
+      <div class="stats-bar" id="statsBar">
+        <div class="stat-pill">
+          <span class="label">Area Name</span>
+          <span class="val" id="statAreaName">Los Angeles Basin</span>
+        </div>
+        <div class="stat-pill">
+          <span class="label">Bounding Box</span>
+          <span class="val" id="statBbox" style="font-size:12px; font-family:monospace;">[-118.50, 33.70, -117.80, 34.30]</span>
+        </div>
+        <div class="stat-pill">
+          <span class="label">Mean Index Value</span>
+          <span class="val" id="statMean">-</span>
+        </div>
+        <div class="stat-pill">
+          <span class="label">Max Peak Value</span>
+          <span class="val" id="statMax">-</span>
+        </div>
+        <div class="stat-pill">
+          <span class="label">Sen2Cor DDV Retrieval</span>
+          <span class="val" id="statRetrieval"><span class="status-badge badge-ok">Normal Retrieval</span></span>
+        </div>
+        <div class="stat-pill">
+          <span class="label">Air Quality Category</span>
+          <span class="val" id="statCategory">-</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Section 2: Metric Catalog & Pixel Simulator -->
     <div class="card">
-      <h2>1. Metric Calculation & Color Palette</h2>
+      <h2>2. Band Pixel Math &amp; Color Palette</h2>
       <label for="metricSelect">Target Air Quality Metric</label>
       <select id="metricSelect"></select>
 
       <div id="dynamicInputs"></div>
 
-      <button id="calcPixelBtn">Compute Pixel & Palette</button>
+      <button id="calcPixelBtn">Compute Pixel &amp; Palette</button>
       <div id="pixelResult" style="margin-top:14px;"></div>
     </div>
 
-    <!-- Card 2: Synthetic Plume & Fallback Diagnostics -->
+    <!-- Section 3: Synthetic Plume & Fallback Diagnostics -->
     <div class="card">
-      <h2>2. Raster Simulation & DDV Diagnostics</h2>
+      <h2>3. Raster Simulation &amp; DDV Diagnostics</h2>
       <label for="simScenario">Simulation Scenario</label>
       <select id="simScenario">
-        <option value="plume">Wildfire / Industrial Smoke Plume (Elevated AOT & SPDI)</option>
+        <option value="plume">Wildfire / Industrial Smoke Plume (Elevated AOT &amp; SPDI)</option>
         <option value="fallback">Arid / Desert / Snow Tile (Sen2Cor DDV Fallback, constant AOT ~0.20)</option>
         <option value="clean">Clean Oceanic / Coastal Atmosphere (AOT &lt; 0.10)</option>
       </select>
@@ -143,9 +301,9 @@
       <pre id="diagOutput">Click "Simulate &amp; Diagnose Raster" to inspect output.</pre>
     </div>
 
-    <!-- Card 3: Sentinel-5P Unit Conversion -->
+    <!-- Section 4: Sentinel-5P Unit Conversion -->
     <div class="card">
-      <h2>3. Sentinel-5P TROPOMI Unit Converter</h2>
+      <h2>4. Sentinel-5P TROPOMI Unit Converter</h2>
       <label for="convValue">Value to Convert</label>
       <input type="number" id="convValue" value="0.00015" step="0.00001">
 
@@ -167,9 +325,9 @@
       <div id="convResult" style="margin-top:14px;"></div>
     </div>
 
-    <!-- Card 4: Senti App Registration Hook Verification -->
+    <!-- Section 5: Senti Host Integration Hook Check -->
     <div class="card">
-      <h2>4. Senti Host Integration Hook Check</h2>
+      <h2>5. Senti Host Integration Hook Check</h2>
       <p style="color:var(--text-muted); font-size:13px;">Verifies that calling <code>registerWithSentiApp</code> patches <code>INDEX_DEFS</code>, <code>COLOR_STRETCH_SCALES</code>, resolution lookups, and atmospheric quantification fallbacks.</p>
       <button id="testRegBtn">Verify Host Registration</button>
       <pre id="regOutput">Click "Verify Host Registration" to run test.</pre>
@@ -181,12 +339,220 @@
 
   <script>
     const AQ = window.AirQualityRemoteSensing;
+
+    // --- Section 1: Leaflet Local Map Viewer ---
+    const PRESETS = {
+      la: {
+        name: "Los Angeles Basin, USA",
+        bounds: [[33.70, -118.50], [34.30, -117.80]],
+        center: [34.00, -118.15],
+        zoom: 10,
+        scenario: "smog"
+      },
+      delhi: {
+        name: "New Delhi / NCR, India",
+        bounds: [[28.35, 76.90], [28.85, 77.45]],
+        center: [28.61, 77.20],
+        zoom: 10,
+        scenario: "severe_inversion"
+      },
+      po: {
+        name: "Po Valley, Milan, Italy",
+        bounds: [[45.25, 9.00], [45.65, 9.45]],
+        center: [45.46, 9.19],
+        zoom: 10,
+        scenario: "stagnant"
+      },
+      campfire: {
+        name: "Paradise / Butte County, USA",
+        bounds: [[39.60, -121.75], [40.00, -121.35]],
+        center: [39.76, -121.62],
+        zoom: 11,
+        scenario: "plume"
+      }
+    };
+
+    const map = L.map('map').setView(PRESETS.la.center, PRESETS.la.zoom);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 18,
+      attribution: '&copy; OpenStreetMap contributors'
+    }).addTo(map);
+
+    let activeAreaLayer = null;
+    let activeBoxLayer = null;
+    let currentBbox = [-118.50, 33.70, -117.80, 34.30];
+    let currentAreaName = "Los Angeles Basin, USA";
+    let currentScenario = "smog";
+
+    // Allow user to click to set a custom bounding box
+    let clickPoints = [];
+    map.on('click', (e) => {
+      clickPoints.push(e.latlng);
+      if (clickPoints.length === 2) {
+        const b = L.latLngBounds(clickPoints[0], clickPoints[1]);
+        currentBbox = [b.getWest(), b.getSouth(), b.getEast(), b.getNorth()];
+        currentAreaName = "Custom User Area";
+        currentScenario = "smog";
+        document.getElementById('areaPreset').value = "custom";
+        renderAreaAirQuality(b);
+        clickPoints = [];
+      } else {
+        document.getElementById('statCategory').textContent = "Click second corner on map...";
+      }
+    });
+
+    const areaPresetSelect = document.getElementById('areaPreset');
+    const mapMetricSelect = document.getElementById('mapMetric');
+    const layerOpacity = document.getElementById('layerOpacity');
+    const opacityVal = document.getElementById('opacityVal');
+    const renderAreaBtn = document.getElementById('renderAreaBtn');
+
+    layerOpacity.addEventListener('input', () => {
+      opacityVal.textContent = layerOpacity.value;
+      if (activeAreaLayer) {
+        activeAreaLayer.setOpacity(Number(layerOpacity.value) / 100);
+      }
+    });
+
+    areaPresetSelect.addEventListener('change', () => {
+      const key = areaPresetSelect.value;
+      if (key !== 'custom' && PRESETS[key]) {
+        const p = PRESETS[key];
+        currentAreaName = p.name;
+        currentScenario = p.scenario;
+        const b = L.latLngBounds(p.bounds);
+        currentBbox = [b.getWest(), b.getSouth(), b.getEast(), b.getNorth()];
+        map.fitBounds(b);
+        renderAreaAirQuality(b);
+      }
+    });
+
+    renderAreaBtn.addEventListener('click', () => {
+      const b = activeBoxLayer ? activeBoxLayer.getBounds() : L.latLngBounds(PRESETS.la.bounds);
+      renderAreaAirQuality(b);
+    });
+
+    function renderAreaAirQuality(bounds) {
+      if (activeAreaLayer) { map.removeLayer(activeAreaLayer); activeAreaLayer = null; }
+      if (activeBoxLayer) { map.removeLayer(activeBoxLayer); activeBoxLayer = null; }
+
+      // Draw bounding box outline
+      activeBoxLayer = L.rectangle(bounds, {
+        color: '#4daafc',
+        weight: 2,
+        fill: false,
+        dashArray: '4, 4'
+      }).addTo(map);
+
+      // Create an offscreen canvas for raster layer
+      const metric = mapMetricSelect.value;
+      const w = 120, h = 120;
+      const canvas = document.createElement('canvas');
+      canvas.width = w;
+      canvas.height = h;
+      const ctx = canvas.getContext('2d');
+      const imgData = ctx.createImageData(w, h);
+
+      const total = w * h;
+      const grid = new Float32Array(total);
+      let sum = 0, maxVal = -Infinity, minVal = Infinity;
+
+      for (let y = 0; y < h; y++) {
+        for (let x = 0; x < w; x++) {
+          const idx = y * w + x;
+          const nx = (x / w) * 2 - 1;
+          const ny = (y / h) * 2 - 1;
+          const dist = Math.sqrt(nx * nx + ny * ny);
+
+          let val = 0;
+          if (currentScenario === 'severe_inversion') {
+            // High regional pollution with urban hotspots
+            val = 0.55 + 0.35 * Math.exp(-dist / 0.6) + (Math.sin(nx * 4) + Math.cos(ny * 4)) * 0.05;
+          } else if (currentScenario === 'plume') {
+            // Wildfire smoke plume drifting across the area
+            const plumeX = nx - 0.2, plumeY = ny + 0.2;
+            const pdist = Math.sqrt(plumeX * plumeX + plumeY * plumeY);
+            val = 0.10 + 0.85 * Math.exp(-pdist / 0.45);
+          } else if (currentScenario === 'stagnant') {
+            // Basin accumulation
+            val = 0.35 + 0.25 * (1 - Math.min(1, dist));
+          } else {
+            // Standard coastal/urban gradient
+            val = 0.15 + 0.30 * (nx * 0.5 + 0.5) + (Math.random() - 0.5) * 0.03;
+          }
+
+          // If metric is PM2.5 proxy, scale AOT to PM2.5 (e.g. AOT 0.5 ~ 35 ug/m3)
+          if (metric === 'pm25_proxy') {
+            val = AQ.calculateAqPixel('pm25_proxy', [val, 2.0]);
+          } else if (metric === 'spdi') {
+            val = Math.max(-0.2, Math.min(1.0, (val - 0.15) * 1.5));
+          } else if (metric === 'asi' || metric === 'ngai') {
+            val = Math.max(0, Math.min(1.0, val * 1.2));
+          }
+
+          grid[idx] = val;
+          sum += val;
+          if (val > maxVal) maxVal = val;
+          if (val < minVal) minVal = val;
+
+          const rgba = AQ.colorizeAqMetric(val, metric, false);
+          const p = idx * 4;
+          imgData.data[p] = rgba[0];
+          imgData.data[p + 1] = rgba[1];
+          imgData.data[p + 2] = rgba[2];
+          imgData.data[p + 3] = rgba[3];
+        }
+      }
+
+      ctx.putImageData(imgData, 0, 0);
+
+      const url = canvas.toDataURL();
+      const op = Number(layerOpacity.value) / 100;
+      activeAreaLayer = L.imageOverlay(url, bounds, { opacity: op }).addTo(map);
+
+      // Diagnostics & Stats
+      const meanVal = sum / total;
+      const diag = AQ.diagnoseAirQualityGrid(grid, metric === 's2_aot' ? 's2_aot' : 's2_aot');
+
+      document.getElementById('statAreaName').textContent = currentAreaName;
+      document.getElementById('statBbox').textContent = `[${currentBbox.map(v => v.toFixed(3)).join(', ')}]`;
+      document.getElementById('statMean').textContent = meanVal.toFixed(3);
+      document.getElementById('statMax').textContent = maxVal.toFixed(3);
+
+      const retBadge = document.getElementById('statRetrieval');
+      if (diag.isConstantFallback) {
+        retBadge.innerHTML = `<span class="status-badge badge-warn">${diag.warning || 'Constant Fallback'}</span>`;
+      } else {
+        retBadge.innerHTML = `<span class="status-badge badge-ok">${diag.category || 'Normal Retrieval'}</span>`;
+      }
+
+      // Qualitative Category Assessment
+      const catEl = document.getElementById('statCategory');
+      let cat = "Good / Clean";
+      let badgeClass = "badge-ok";
+      if (metric === 's2_aot') {
+        if (meanVal > 0.6) { cat = "Hazardous / High AOT"; badgeClass = "badge-danger"; }
+        else if (meanVal > 0.3) { cat = "Moderate / Elevated AOT"; badgeClass = "badge-warn"; }
+      } else if (metric === 'pm25_proxy') {
+        if (meanVal > 55) { cat = "Unhealthy (>55 μg/m³)"; badgeClass = "badge-danger"; }
+        else if (meanVal > 35) { cat = "Unhealthy for Sensitive (>35 μg/m³)"; badgeClass = "badge-warn"; }
+        else if (meanVal > 12) { cat = "Moderate (12-35 μg/m³)"; badgeClass = "badge-ok"; }
+        else { cat = "Good (<12 μg/m³)"; badgeClass = "badge-ok"; }
+      } else {
+        if (meanVal > 0.5) { cat = "Elevated Plume / Gas"; badgeClass = "badge-warn"; }
+      }
+      catEl.innerHTML = `<span class="status-badge ${badgeClass}">${cat}</span>`;
+    }
+
+    // Initialize local area viewer with LA preset
+    renderAreaAirQuality(L.latLngBounds(PRESETS.la.bounds));
+
+    // --- Section 2: Metric Dropdown & Dynamic Inputs ---
     const metricSelect = document.getElementById('metricSelect');
     const dynamicInputs = document.getElementById('dynamicInputs');
     const calcPixelBtn = document.getElementById('calcPixelBtn');
     const pixelResult = document.getElementById('pixelResult');
 
-    // Populate metric dropdown
     for (const [id, def] of Object.entries(AQ.AQ_METRICS)) {
       const opt = document.createElement('option');
       opt.value = id;
@@ -233,7 +599,7 @@
       `;
     });
 
-    // Raster simulation and diagnostics
+    // --- Section 3: Raster simulation and diagnostics ---
     const simScenario = document.getElementById('simScenario');
     const runSimBtn = document.getElementById('runSimBtn');
     const rasterCanvas = document.getElementById('rasterCanvas');
@@ -254,18 +620,15 @@
           const dist = Math.sqrt(cx * cx + cy * cy);
 
           if (scenario === 'plume') {
-            // Gaussian smoke plume
             const plume = Math.exp(-dist / 25);
             aotGrid[idx] = 0.08 + 0.65 * plume;
             coastalGrid[idx] = 0.15 + 0.35 * plume;
-            swir22Grid[idx] = 0.12 + 0.02 * plume; // Transparent in SWIR
+            swir22Grid[idx] = 0.12 + 0.02 * plume;
           } else if (scenario === 'fallback') {
-            // Constant Sen2Cor fallback ~0.20 with negligible noise
             aotGrid[idx] = 0.20 + (Math.random() - 0.5) * 0.0005;
             coastalGrid[idx] = 0.25;
             swir22Grid[idx] = 0.35;
           } else {
-            // Clean atmosphere
             aotGrid[idx] = 0.05 + (Math.random() - 0.5) * 0.01;
             coastalGrid[idx] = 0.08;
             swir22Grid[idx] = 0.04;
@@ -273,10 +636,7 @@
         }
       }
 
-      // Diagnose
       const diag = AQ.diagnoseAirQualityGrid(aotGrid, 's2_aot');
-
-      // Render to canvas
       const ctx = rasterCanvas.getContext('2d');
       const imgData = ctx.createImageData(w, h);
       for (let i = 0; i < total; i++) {
@@ -288,11 +648,10 @@
         imgData.data[p + 3] = rgba[3];
       }
       ctx.putImageData(imgData, 0, 0);
-
       diagOutput.textContent = JSON.stringify(diag, null, 2);
     });
 
-    // Unit conversion
+    // --- Section 4: Unit conversion ---
     const convValue = document.getElementById('convValue');
     const convFrom = document.getElementById('convFrom');
     const convTo = document.getElementById('convTo');
@@ -307,7 +666,7 @@
       convResult.innerHTML = `<strong>Result:</strong> ${res.toExponential(5)} ${to}`;
     });
 
-    // Registration hook verification
+    // --- Section 5: Registration hook verification ---
     const testRegBtn = document.getElementById('testRegBtn');
     const regOutput = document.getElementById('regOutput');
 

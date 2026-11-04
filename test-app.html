@@ -372,11 +372,24 @@
       }
     };
 
-    const map = L.map('map').setView(PRESETS.la.center, PRESETS.la.zoom);
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      maxZoom: 18,
-      attribution: '&copy; OpenStreetMap contributors'
-    }).addTo(map);
+    const basemaps = {
+      'Esri World Imagery': L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+        attribution: 'Tiles &copy; Esri',
+        maxZoom: 19,
+        crossOrigin: 'anonymous'
+      }),
+      'Esri Light Gray Canvas': L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}', {
+        attribution: 'Tiles &copy; Esri',
+        maxZoom: 16,
+        crossOrigin: 'anonymous'
+      })
+    };
+
+    const map = L.map('map', {
+      layers: [basemaps['Esri World Imagery']]
+    }).setView(PRESETS.la.center, PRESETS.la.zoom);
+
+    L.control.layers(basemaps, null, { position: 'topright' }).addTo(map);
 
     let activeAreaLayer = null;
     let activeBoxLayer = null;

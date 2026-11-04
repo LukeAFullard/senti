@@ -32,6 +32,7 @@ The app's existing HTML and CSS are preserved. External libraries and data provi
 | `js/08-reports-and-geospatial-exports.js` | Reproducibility report, geospatial exports and OPTRAM diagnostics | Depends on result state and export metadata |
 | `js/09-seasonal-anomaly-and-radar-discovery.js` | Seasonal anomaly calculations/overlays/exports and Sentinel-1 discovery/access helpers | Radar provider access is optional and may be restricted; anomaly calculation is satellite-only |
 | `js/10-radar-rendering-and-comparison.js` | Sentinel-1 raster loading/rendering, optical-radar comparison and radar UI event handlers | Optional feature, but currently references core state and specific DOM controls |
+| `js/11-air-quality-module.js` | Air quality remote sensing metrics (AOT, WVP, ASI, NGAI, SPDI, CDI, PM2.5 proxy), Sen2Cor DDV fallback diagnostics, and trace-gas units | Standalone typed-array module with optional Senti app adapter |
 
 ## Dependency direction intended for the next refactor
 

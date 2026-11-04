@@ -681,7 +681,7 @@
 
       // Diagnostics & Stats
       const meanVal = validCount > 0 ? (sum / validCount) : NaN;
-      const diag = AQ.diagnoseAirQualityGrid(grid, metric === 's2_wvp' ? 's2_wvp' : 's2_aot');
+      const diag = AQ.diagnoseAirQualityGrid(grid, metric);
 
       document.getElementById('statMean').textContent = Number.isFinite(meanVal) ? meanVal.toFixed(3) : 'NaN';
       document.getElementById('statMax').textContent = Number.isFinite(maxVal) ? maxVal.toFixed(3) : 'NaN';

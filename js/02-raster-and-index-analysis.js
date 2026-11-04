@@ -277,6 +277,11 @@
     return 10;
   }
 
+  if (typeof window !== 'undefined') {
+    window.getNativeResolution = getNativeResolution;
+    window.calculateIndexValue = calculateIndexValue;
+  }
+
   function calculateIndexValue(mode, bands) {
     if (!bands.every(Number.isFinite)) return NaN;
     const normalizedDifference = (a, b) => {

@@ -673,6 +673,9 @@
     }
     return [0, 0, 0, 0];
   }
+  if (typeof window !== 'undefined') {
+    window.colorizeIndex = colorizeIndex;
+  }
 
   function updateLegend(mode, isDiff) {
     if (isDiff && !['rgb', 'rgb_bands', 'false_color'].includes(mode)) {

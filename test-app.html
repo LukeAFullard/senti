@@ -7,6 +7,8 @@
 
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/proj4js/2.11.0/proj4.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/geotiff@2.1.3/dist-browser/geotiff.js"></script>
 
   <style>
     :root {
@@ -208,19 +210,27 @@
 
       <div class="map-controls">
         <div>
+          <label for="dataSourceMode">Data Source Mode</label>
+          <select id="dataSourceMode">
+            <option value="live" selected>Live Sentinel-2 STAC (Earth Search AWS COGs)</option>
+            <option value="synthetic">Synthetic Regional Model (Offline/Simulation)</option>
+          </select>
+        </div>
+        <div>
           <label for="areaPreset">Local Monitoring Area Preset</label>
           <select id="areaPreset">
             <option value="la">Los Angeles Basin, USA (Urban / Coastal Smog)</option>
             <option value="delhi">New Delhi / NCR, India (Severe Winter Inversion / Smoke)</option>
             <option value="po">Po Valley, Milan, Italy (Topographical Smog Basin)</option>
             <option value="campfire">Paradise / Butte County, USA (Wildfire Smoke Plume)</option>
-            <option value="custom">-- Custom Map Bounding Box --</option>
+            <option value="custom">-- Custom Map Bounding Box (Click 2 Points) --</option>
           </select>
         </div>
         <div>
           <label for="mapMetric">Air Quality Layer</label>
           <select id="mapMetric">
             <option value="s2_aot">S2-AOT (Aerosol Optical Thickness @ 550nm)</option>
+            <option value="s2_wvp">S2-WVP (Water Vapour Path, cm)</option>
             <option value="spdi">SPDI (Smoke / Plume Dispersion Index)</option>
             <option value="pm25_proxy">PM2.5 Screening Proxy (Calibrated μg/m³)</option>
             <option value="asi">ASI (Aerosol &amp; Smog Index)</option>
@@ -233,7 +243,7 @@
           <input type="range" id="layerOpacity" min="10" max="100" value="85">
         </div>
         <div>
-          <button id="renderAreaBtn" type="button">Render Local Area Layer</button>
+          <button id="renderAreaBtn" type="button">Fetch &amp; Render Area</button>
         </div>
       </div>
 
@@ -253,6 +263,14 @@
         <div class="stat-pill">
           <span class="label">Bounding Box</span>
           <span class="val" id="statBbox" style="font-size:12px; font-family:monospace;">[-118.50, 33.70, -117.80, 34.30]</span>
+        </div>
+        <div class="stat-pill">
+          <span class="label">Data Provenance</span>
+          <span class="val" id="statSource" style="font-size:12px;">Live STAC (AWS COG)</span>
+        </div>
+        <div class="stat-pill">
+          <span class="label">Scene / Date</span>
+          <span class="val" id="statScene" style="font-size:12px;">Searching...</span>
         </div>
         <div class="stat-pill">
           <span class="label">Mean Index Value</span>
@@ -344,31 +362,35 @@
     const PRESETS = {
       la: {
         name: "Los Angeles Basin, USA",
-        bounds: [[33.70, -118.50], [34.30, -117.80]],
+        bounds: [[33.75, -118.45], [34.25, -117.85]],
         center: [34.00, -118.15],
         zoom: 10,
-        scenario: "smog"
+        scenario: "smog",
+        stacDate: "2023-08-01T00:00:00Z/2023-09-01T00:00:00Z"
       },
       delhi: {
         name: "New Delhi / NCR, India",
-        bounds: [[28.35, 76.90], [28.85, 77.45]],
+        bounds: [[28.40, 77.00], [28.85, 77.40]],
         center: [28.61, 77.20],
         zoom: 10,
-        scenario: "severe_inversion"
+        scenario: "severe_inversion",
+        stacDate: "2022-11-01T00:00:00Z/2022-11-15T00:00:00Z"
       },
       po: {
         name: "Po Valley, Milan, Italy",
         bounds: [[45.25, 9.00], [45.65, 9.45]],
         center: [45.46, 9.19],
         zoom: 10,
-        scenario: "stagnant"
+        scenario: "stagnant",
+        stacDate: "2023-06-01T00:00:00Z/2023-07-01T00:00:00Z"
       },
       campfire: {
         name: "Paradise / Butte County, USA",
-        bounds: [[39.60, -121.75], [40.00, -121.35]],
+        bounds: [[39.65, -121.75], [40.00, -121.35]],
         center: [39.76, -121.62],
         zoom: 11,
-        scenario: "plume"
+        scenario: "plume",
+        stacDate: "2018-11-08T00:00:00Z/2018-11-15T00:00:00Z"
       }
     };
 
@@ -414,6 +436,7 @@
       }
     });
 
+    const dataSourceSelect = document.getElementById('dataSourceMode');
     const areaPresetSelect = document.getElementById('areaPreset');
     const mapMetricSelect = document.getElementById('mapMetric');
     const layerOpacity = document.getElementById('layerOpacity');
@@ -440,12 +463,103 @@
       }
     });
 
+    dataSourceSelect.addEventListener('change', () => {
+      const b = activeBoxLayer ? activeBoxLayer.getBounds() : L.latLngBounds(PRESETS.la.bounds);
+      renderAreaAirQuality(b);
+    });
+
     renderAreaBtn.addEventListener('click', () => {
       const b = activeBoxLayer ? activeBoxLayer.getBounds() : L.latLngBounds(PRESETS.la.bounds);
       renderAreaAirQuality(b);
     });
 
-    function renderAreaAirQuality(bounds) {
+    // Helper functions for UTM and GeoTIFF windowing
+    function parseEpsgCode(val) {
+      if (!val) return null;
+      if (Number.isInteger(Number(val))) return Number(val);
+      const m = String(val).match(/(?:EPSG:)?(\d{4,6})/i);
+      return m ? Number(m[1]) : null;
+    }
+
+    function getRasterCrsName(image, item, bbox) {
+      let geoKeys = {};
+      try { if (typeof image.getGeoKeys === 'function') geoKeys = image.getGeoKeys() || {}; } catch (_) {}
+      const cand = [parseEpsgCode(item?.properties?.['proj:epsg']), parseEpsgCode(item?.properties?.['proj:code']), parseEpsgCode(geoKeys.ProjectedCSTypeGeoKey)];
+      let epsg = cand.find(c => Number.isInteger(c) && ((c >= 32601 && c <= 32660) || (c >= 32701 && c <= 32760)));
+      if (!epsg) {
+        const lon = (bbox[0] + bbox[2]) / 2, lat = (bbox[1] + bbox[3]) / 2;
+        const zone = Math.min(60, Math.max(1, Math.floor((lon + 180) / 6) + 1));
+        epsg = (lat < 0 ? 32700 : 32600) + zone;
+      }
+      const zone = epsg % 100;
+      const isSouth = epsg >= 32701 && epsg <= 32760;
+      const crsName = 'EPSG:' + epsg;
+      proj4.defs(crsName, '+proj=utm +zone=' + zone + (isSouth ? ' +south' : '') + ' +datum=WGS84 +units=m +no_defs +type=crs');
+      return crsName;
+    }
+
+    async function fetchLiveStacScenes(bbox, dateRange) {
+      const aoiGeom = {
+        type: 'Polygon',
+        coordinates: [[[bbox[0], bbox[1]], [bbox[2], bbox[1]], [bbox[2], bbox[3]], [bbox[0], bbox[3]], [bbox[0], bbox[1]]]]
+      };
+      const res = await fetch('https://earth-search.aws.element84.com/v1/search', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          collections: ['sentinel-2-l2a'],
+          intersects: aoiGeom,
+          datetime: dateRange || '2023-01-01T00:00:00Z/2023-12-31T23:59:59Z',
+          query: { 'eo:cloud_cover': { lt: 30 } },
+          limit: 3
+        })
+      });
+      if (!res.ok) throw new Error(`STAC search returned HTTP ${res.status}`);
+      const data = await res.json();
+      return data.features || [];
+    }
+
+    async function readStacBandWindow(assetUrl, bbox, targetWidth, targetHeight, item) {
+      const tiff = await GeoTIFF.fromUrl(assetUrl);
+      const image = await tiff.getImage();
+      const crsName = getRasterCrsName(image, item, bbox);
+
+      const origin = image.getOrigin();
+      const resolution = image.getResolution();
+      const imageWidth = image.getWidth(), imageHeight = image.getHeight();
+
+      const [west, south, east, north] = bbox;
+      const perimeter = [];
+      const segs = 4;
+      for (let i = 0; i <= segs; i++) {
+        const t = i / segs;
+        perimeter.push([west + (east - west) * t, south], [west + (east - west) * t, north], [west, south + (north - south) * t], [east, south + (north - south) * t]);
+      }
+      const projPts = perimeter.map(p => proj4('EPSG:4326', crsName, p));
+      const px = projPts.map(p => (p[0] - origin[0]) / resolution[0]);
+      const py = projPts.map(p => (p[1] - origin[1]) / resolution[1]);
+
+      const window = [
+        Math.max(0, Math.floor(Math.min(...px))),
+        Math.max(0, Math.floor(Math.min(...py))),
+        Math.min(imageWidth, Math.ceil(Math.max(...px))),
+        Math.min(imageHeight, Math.ceil(Math.max(...py)))
+      ];
+
+      if (window[0] >= window[2] || window[1] >= window[3]) {
+        throw new Error('Bounding box does not overlap this tile window.');
+      }
+
+      const raw = await image.readRasters({
+        window,
+        width: targetWidth,
+        height: targetHeight,
+        resampleMethod: 'bilinear'
+      });
+      return raw[0];
+    }
+
+    async function renderAreaAirQuality(bounds) {
       if (activeAreaLayer) { map.removeLayer(activeAreaLayer); activeAreaLayer = null; }
       if (activeBoxLayer) { map.removeLayer(activeBoxLayer); activeBoxLayer = null; }
 
@@ -457,63 +571,105 @@
         dashArray: '4, 4'
       }).addTo(map);
 
-      // Create an offscreen canvas for raster layer
       const metric = mapMetricSelect.value;
+      const isLive = (dataSourceSelect.value === 'live');
       const w = 120, h = 120;
+      const total = w * h;
+      const grid = new Float32Array(total);
+      let sum = 0, validCount = 0, maxVal = -Infinity, minVal = Infinity;
+
+      document.getElementById('statAreaName').textContent = currentAreaName;
+      document.getElementById('statBbox').textContent = `[${currentBbox.map(v => v.toFixed(3)).join(', ')}]`;
+      document.getElementById('statSource').innerHTML = isLive
+        ? '<span style="color:#79c0ff;">Live STAC (AWS COGs)</span>'
+        : '<span style="color:#e0e6ed;">Synthetic Model</span>';
+
       const canvas = document.createElement('canvas');
       canvas.width = w;
       canvas.height = h;
       const ctx = canvas.getContext('2d');
       const imgData = ctx.createImageData(w, h);
 
-      const total = w * h;
-      const grid = new Float32Array(total);
-      let sum = 0, maxVal = -Infinity, minVal = Infinity;
+      if (isLive) {
+        document.getElementById('statScene').innerHTML = '<em>Querying STAC &amp; COG byte-ranges...</em>';
+        try {
+          const presetKey = areaPresetSelect.value;
+          const dateRange = (presetKey !== 'custom' && PRESETS[presetKey]) ? PRESETS[presetKey].stacDate : '2023-01-01T00:00:00Z/2023-12-31T23:59:59Z';
+          const items = await fetchLiveStacScenes(currentBbox, dateRange);
 
-      for (let y = 0; y < h; y++) {
-        for (let x = 0; x < w; x++) {
-          const idx = y * w + x;
-          const nx = (x / w) * 2 - 1;
-          const ny = (y / h) * 2 - 1;
-          const dist = Math.sqrt(nx * nx + ny * ny);
-
-          let val = 0;
-          if (currentScenario === 'severe_inversion') {
-            // High regional pollution with urban hotspots
-            val = 0.55 + 0.35 * Math.exp(-dist / 0.6) + (Math.sin(nx * 4) + Math.cos(ny * 4)) * 0.05;
-          } else if (currentScenario === 'plume') {
-            // Wildfire smoke plume drifting across the area
-            const plumeX = nx - 0.2, plumeY = ny + 0.2;
-            const pdist = Math.sqrt(plumeX * plumeX + plumeY * plumeY);
-            val = 0.10 + 0.85 * Math.exp(-pdist / 0.45);
-          } else if (currentScenario === 'stagnant') {
-            // Basin accumulation
-            val = 0.35 + 0.25 * (1 - Math.min(1, dist));
-          } else {
-            // Standard coastal/urban gradient
-            val = 0.15 + 0.30 * (nx * 0.5 + 0.5) + (Math.random() - 0.5) * 0.03;
+          if (!items || items.length === 0) {
+            throw new Error('No cloudless Sentinel-2 L2A scene found for this area & date. Switching to synthetic model fallback.');
           }
 
-          // If metric is PM2.5 proxy, scale AOT to PM2.5 (e.g. AOT 0.5 ~ 35 ug/m3)
-          if (metric === 'pm25_proxy') {
-            val = AQ.calculateAqPixel('pm25_proxy', [val, 2.0]);
-          } else if (metric === 'spdi') {
-            val = Math.max(-0.2, Math.min(1.0, (val - 0.15) * 1.5));
-          } else if (metric === 'asi' || metric === 'ngai') {
-            val = Math.max(0, Math.min(1.0, val * 1.2));
+          const scene = items[0];
+          const dt = scene.properties.datetime ? scene.properties.datetime.substring(0, 10) : '2023';
+          const cc = (scene.properties['eo:cloud_cover'] ?? 0).toFixed(1);
+          document.getElementById('statScene').textContent = `${scene.id.substring(0, 18)}… (${dt}, ${cc}% cloud)`;
+
+          // Determine which assets are required for the metric
+          const def = AQ.AQ_METRICS[metric];
+          const bandKeys = def ? def.bands : ['aot'];
+
+          // Read each required asset via GeoTIFF
+          const bandBuffers = {};
+          for (const bk of bandKeys) {
+            const assetObj = scene.assets[bk] || scene.assets[bk === 'swir22' ? 'swir22' : bk];
+            if (!assetObj || !assetObj.href) {
+              throw new Error(`Asset ${bk} not available in STAC item.`);
+            }
+            const rawRaster = await readStacBandWindow(assetObj.href, currentBbox, w, h, scene);
+            // Apply scale (typically 0.001 for AOT/WVP and 0.0001 for surface reflectance)
+            const scale = assetObj['raster:bands']?.[0]?.scale || (bk === 'aot' || bk === 'wvp' ? 0.001 : 0.0001);
+            const nodata = assetObj['raster:bands']?.[0]?.nodata ?? 0;
+            const scaled = new Float32Array(rawRaster.length);
+            for (let i = 0; i < rawRaster.length; i++) {
+              const r = rawRaster[i];
+              scaled[i] = (r === nodata || !Number.isFinite(r)) ? NaN : r * scale;
+            }
+            bandBuffers[bk] = scaled;
           }
 
-          grid[idx] = val;
-          sum += val;
-          if (val > maxVal) maxVal = val;
-          if (val < minVal) minVal = val;
+          for (let idx = 0; idx < total; idx++) {
+            const pixelBands = bandKeys.map(bk => bandBuffers[bk][idx]);
+            const val = AQ.calculateAqPixel(metric, pixelBands);
+            grid[idx] = val;
+            if (Number.isFinite(val)) {
+              sum += val; validCount++;
+              if (val > maxVal) maxVal = val;
+              if (val < minVal) minVal = val;
+            }
+            const rgba = AQ.colorizeAqMetric(val, metric, false);
+            const p = idx * 4;
+            imgData.data[p] = rgba[0];
+            imgData.data[p + 1] = rgba[1];
+            imgData.data[p + 2] = rgba[2];
+            imgData.data[p + 3] = rgba[3];
+          }
 
-          const rgba = AQ.colorizeAqMetric(val, metric, false);
-          const p = idx * 4;
-          imgData.data[p] = rgba[0];
-          imgData.data[p + 1] = rgba[1];
-          imgData.data[p + 2] = rgba[2];
-          imgData.data[p + 3] = rgba[3];
+        } catch (err) {
+          console.warn('Live STAC fetch error:', err.message, '; using fallback model.');
+          document.getElementById('statScene').innerHTML = `<span style="color:var(--warning); font-size:11px;">Fallback: ${err.message}</span>`;
+          // Compute fallback synthetic raster
+          computeSyntheticRaster(grid, imgData, metric, w, h);
+          for (let i = 0; i < total; i++) {
+            const v = grid[i];
+            if (Number.isFinite(v)) {
+              sum += v; validCount++;
+              if (v > maxVal) maxVal = v;
+              if (v < minVal) minVal = v;
+            }
+          }
+        }
+      } else {
+        document.getElementById('statScene').textContent = `Synthetic Model (${currentScenario})`;
+        computeSyntheticRaster(grid, imgData, metric, w, h);
+        for (let i = 0; i < total; i++) {
+          const v = grid[i];
+          if (Number.isFinite(v)) {
+            sum += v; validCount++;
+            if (v > maxVal) maxVal = v;
+            if (v < minVal) minVal = v;
+          }
         }
       }
 
@@ -524,13 +680,11 @@
       activeAreaLayer = L.imageOverlay(url, bounds, { opacity: op }).addTo(map);
 
       // Diagnostics & Stats
-      const meanVal = sum / total;
-      const diag = AQ.diagnoseAirQualityGrid(grid, metric === 's2_aot' ? 's2_aot' : 's2_aot');
+      const meanVal = validCount > 0 ? (sum / validCount) : NaN;
+      const diag = AQ.diagnoseAirQualityGrid(grid, metric === 's2_wvp' ? 's2_wvp' : 's2_aot');
 
-      document.getElementById('statAreaName').textContent = currentAreaName;
-      document.getElementById('statBbox').textContent = `[${currentBbox.map(v => v.toFixed(3)).join(', ')}]`;
-      document.getElementById('statMean').textContent = meanVal.toFixed(3);
-      document.getElementById('statMax').textContent = maxVal.toFixed(3);
+      document.getElementById('statMean').textContent = Number.isFinite(meanVal) ? meanVal.toFixed(3) : 'NaN';
+      document.getElementById('statMax').textContent = Number.isFinite(maxVal) ? maxVal.toFixed(3) : 'NaN';
 
       const retBadge = document.getElementById('statRetrieval');
       if (diag.isConstantFallback) {
@@ -555,6 +709,48 @@
         if (meanVal > 0.5) { cat = "Elevated Plume / Gas"; badgeClass = "badge-warn"; }
       }
       catEl.innerHTML = `<span class="status-badge ${badgeClass}">${cat}</span>`;
+    }
+
+    function computeSyntheticRaster(grid, imgData, metric, w, h) {
+      for (let y = 0; y < h; y++) {
+        for (let x = 0; x < w; x++) {
+          const idx = y * w + x;
+          const nx = (x / w) * 2 - 1;
+          const ny = (y / h) * 2 - 1;
+          const dist = Math.sqrt(nx * nx + ny * ny);
+
+          let val = 0;
+          if (currentScenario === 'severe_inversion') {
+            val = 0.55 + 0.35 * Math.exp(-dist / 0.6) + (Math.sin(nx * 4) + Math.cos(ny * 4)) * 0.05;
+          } else if (currentScenario === 'plume') {
+            const plumeX = nx - 0.2, plumeY = ny + 0.2;
+            const pdist = Math.sqrt(plumeX * plumeX + plumeY * plumeY);
+            val = 0.10 + 0.85 * Math.exp(-pdist / 0.45);
+          } else if (currentScenario === 'stagnant') {
+            val = 0.35 + 0.25 * (1 - Math.min(1, dist));
+          } else {
+            val = 0.15 + 0.30 * (nx * 0.5 + 0.5) + (Math.random() - 0.5) * 0.03;
+          }
+
+          if (metric === 'pm25_proxy') {
+            val = AQ.calculateAqPixel('pm25_proxy', [val, 2.0]);
+          } else if (metric === 'spdi') {
+            val = Math.max(-0.2, Math.min(1.0, (val - 0.15) * 1.5));
+          } else if (metric === 'asi' || metric === 'ngai') {
+            val = Math.max(0, Math.min(1.0, val * 1.2));
+          } else if (metric === 's2_wvp') {
+            val = 1.2 + val * 2.5;
+          }
+
+          grid[idx] = val;
+          const rgba = AQ.colorizeAqMetric(val, metric, false);
+          const p = idx * 4;
+          imgData.data[p] = rgba[0];
+          imgData.data[p + 1] = rgba[1];
+          imgData.data[p + 2] = rgba[2];
+          imgData.data[p + 3] = rgba[3];
+        }
+      }
     }
 
     // Initialize local area viewer with LA preset

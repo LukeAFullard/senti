@@ -18,12 +18,29 @@ assert(typeof AQ.convertTraceGasUnits === 'function', 'convertTraceGasUnits must
 assert(typeof AQ.colorizeAqMetric === 'function', 'colorizeAqMetric must be a function');
 assert(typeof AQ.registerWithSentiApp === 'function', 'registerWithSentiApp must be a function');
 assert(typeof AQ.normalizeSen2CorAtmosphericGrid === 'function', 'normalizeSen2CorAtmosphericGrid must be a function');
+assert(AQ.S5P_PRODUCTS && typeof AQ.S5P_PRODUCTS === 'object', 'S5P_PRODUCTS catalog must be exported');
+assert(typeof AQ.ensureH5Wasm === 'function', 'ensureH5Wasm must be a function');
+assert(typeof AQ.gridS5pNetCdfBuffer === 'function', 'gridS5pNetCdfBuffer must be a function');
+assert(typeof AQ.searchS5pStac === 'function', 'searchS5pStac must be a function');
+assert(typeof AQ.signAndFetchS5pBuffer === 'function', 'signAndFetchS5pBuffer must be a function');
 
 const expectedMetrics = ['s2_aot', 's2_wvp', 'asi', 'ngai', 'spdi', 'cdi', 'pm25_proxy'];
 for (const m of expectedMetrics) {
   assert(AQ.AQ_METRICS[m], `Metric ${m} must be defined in AQ_METRICS`);
   assert(Array.isArray(AQ.AQ_METRICS[m].bands), `Metric ${m} must specify bands array`);
   assert(AQ.AQ_METRICS[m].scale && typeof AQ.AQ_METRICS[m].scale.min === 'number', `Metric ${m} must define scale`);
+}
+
+const expectedS5pGases = ['no2', 'so2', 'co', 'o3', 'ch4', 'hcho', 'aer_ai'];
+for (const g of expectedS5pGases) {
+  assert(AQ.S5P_PRODUCTS[g], `S5P_PRODUCTS must define ${g}`);
+  assert(AQ.S5P_PRODUCTS[g].stacProduct, `${g} must define stacProduct`);
+  assert(AQ.S5P_PRODUCTS[g].assetKey, `${g} must define assetKey`);
+  assert(AQ.S5P_PRODUCTS[g].h5Var, `${g} must define h5Var`);
+  assert(AQ.S5P_PRODUCTS[g].displayUnit, `${g} must define displayUnit`);
+  assert(typeof AQ.S5P_PRODUCTS[g].multiplier === 'number', `${g} must define multiplier`);
+  assert(typeof AQ.S5P_PRODUCTS[g].minQa === 'number', `${g} must define minQa`);
+  assert(Array.isArray(AQ.S5P_PRODUCTS[g].legendItems), `${g} must define legendItems`);
 }
 console.log('✓ Module exports and metric definitions verified.');
 
@@ -122,6 +139,16 @@ const diffClean = AQ.colorizeAqMetric(-0.25, 's2_aot', true);
 const diffPolluted = AQ.colorizeAqMetric(0.25, 's2_aot', true);
 assert(diffClean[2] > diffClean[0], 'Cleaner air diff should have higher blue than red');
 assert(diffPolluted[0] > diffPolluted[2], 'Polluted air diff should have higher red than blue');
+
+// Test S5P trace gas colorization
+for (const g of expectedS5pGases) {
+  const minColor = AQ.colorizeAqMetric(AQ.S5P_PRODUCTS[g].scale.min - 10, g, false);
+  const maxColor = AQ.colorizeAqMetric(AQ.S5P_PRODUCTS[g].scale.max + 10, g, false);
+  assert(Array.isArray(minColor) && minColor.length === 4, `${g} minColor must be RGBA`);
+  assert(Array.isArray(maxColor) && maxColor.length === 4, `${g} maxColor must be RGBA`);
+  assert(minColor[3] > 0, `${g} min alpha must be non-zero`);
+  assert(maxColor[3] > 0, `${g} max alpha must be non-zero`);
+}
 console.log('✓ Colorization and diff palettes verified.');
 
 console.log('--- 7. Testing registerWithSentiApp Host Integration ---');

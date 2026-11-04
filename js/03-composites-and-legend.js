@@ -737,6 +737,14 @@
     legend.style.display = 'flex';
   }
 
+  if (typeof window !== 'undefined') {
+    window.updateLegend = updateLegend;
+    window.ensureLegendStretch = ensureLegendStretch;
+    window.customLegendMarkup = customLegendMarkup;
+    window.updateLegendStretchUI = updateLegendStretchUI;
+    window.transformedLegendValue = transformedLegendValue;
+  }
+
   let legendRenderTimer = null;
   legend.addEventListener('input', event => {
     const target = event.target;

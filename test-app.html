@@ -213,6 +213,7 @@
           <label for="dataSourceMode">Data Source Mode</label>
           <select id="dataSourceMode">
             <option value="live" selected>Live Sentinel-2 STAC (Earth Search AWS COGs)</option>
+            <option value="s5p_live">Live Sentinel-5P TROPOMI (Planetary Computer NetCDF + h5wasm)</option>
             <option value="synthetic">Synthetic Regional Model (Offline/Simulation)</option>
           </select>
         </div>
@@ -229,13 +230,24 @@
         <div>
           <label for="mapMetric">Air Quality Layer</label>
           <select id="mapMetric">
-            <option value="s2_aot">S2-AOT (Aerosol Optical Thickness @ 550nm)</option>
-            <option value="s2_wvp">S2-WVP (Water Vapour Path, cm)</option>
-            <option value="spdi">SPDI (Smoke / Plume Dispersion Index)</option>
-            <option value="pm25_proxy">PM2.5 Screening Proxy (Calibrated μg/m³)</option>
-            <option value="asi">ASI (Aerosol &amp; Smog Index)</option>
-            <option value="ngai">NGAI (Nitrogen Dioxide / Trace Gas Proxy)</option>
-            <option value="cdi">CDI (Cirrus &amp; Dust Index)</option>
+            <optgroup label="Sentinel-2 Optical Air Quality &amp; Plumes">
+              <option value="s2_aot">S2-AOT (Aerosol Optical Thickness @ 550nm)</option>
+              <option value="s2_wvp">S2-WVP (Water Vapour Path, cm)</option>
+              <option value="spdi">SPDI (Smoke / Plume Dispersion Index)</option>
+              <option value="pm25_proxy">PM2.5 Screening Proxy (Calibrated μg/m³)</option>
+              <option value="asi">ASI (Aerosol &amp; Smog Index)</option>
+              <option value="ngai">NGAI (Nitrogen Dioxide / Trace Gas Proxy)</option>
+              <option value="cdi">CDI (Cirrus &amp; Dust Index)</option>
+            </optgroup>
+            <optgroup label="Sentinel-5P Trace Gases (TROPOMI)">
+              <option value="no2">NO₂ (Nitrogen Dioxide Column, µmol/m²)</option>
+              <option value="so2">SO₂ (Sulfur Dioxide Column, µmol/m²)</option>
+              <option value="co">CO (Carbon Monoxide Column, mmol/m²)</option>
+              <option value="o3">O₃ (Ozone Total Column, DU)</option>
+              <option value="ch4">CH₄ (Methane Mixing Ratio, ppb)</option>
+              <option value="hcho">HCHO (Formaldehyde Column, µmol/m²)</option>
+              <option value="aer_ai">UVAI (UV Aerosol Index, UVAI)</option>
+            </optgroup>
           </select>
         </div>
         <div>
@@ -572,17 +584,25 @@
       }).addTo(map);
 
       const metric = mapMetricSelect.value;
-      const isLive = (dataSourceSelect.value === 'live');
+      const isS5pMetric = Boolean(AQ.S5P_PRODUCTS && AQ.S5P_PRODUCTS[metric]);
+      const isS5pMode = (dataSourceSelect.value === 's5p_live') || isS5pMetric;
+      const isLive = (dataSourceSelect.value === 'live') && !isS5pMetric;
       const w = 120, h = 120;
       const total = w * h;
-      const grid = new Float32Array(total);
+      let grid = new Float32Array(total);
       let sum = 0, validCount = 0, maxVal = -Infinity, minVal = Infinity;
+      let unitLabel = '';
 
       document.getElementById('statAreaName').textContent = currentAreaName;
       document.getElementById('statBbox').textContent = `[${currentBbox.map(v => v.toFixed(3)).join(', ')}]`;
-      document.getElementById('statSource').innerHTML = isLive
-        ? '<span style="color:#79c0ff;">Live STAC (AWS COGs)</span>'
-        : '<span style="color:#e0e6ed;">Synthetic Model</span>';
+
+      if (isS5pMode) {
+        document.getElementById('statSource').innerHTML = '<span style="color:#fd8d3c;">Planetary Computer S5P L2 (NetCDF + h5wasm)</span>';
+      } else if (isLive) {
+        document.getElementById('statSource').innerHTML = '<span style="color:#79c0ff;">Live STAC (AWS COGs)</span>';
+      } else {
+        document.getElementById('statSource').innerHTML = '<span style="color:#e0e6ed;">Synthetic Model</span>';
+      }
 
       const canvas = document.createElement('canvas');
       canvas.width = w;
@@ -590,7 +610,59 @@
       const ctx = canvas.getContext('2d');
       const imgData = ctx.createImageData(w, h);
 
-      if (isLive) {
+      if (isS5pMode) {
+        const gasId = isS5pMetric ? metric : 'no2';
+        const pDef = AQ.S5P_PRODUCTS[gasId];
+        unitLabel = ` ${pDef.displayUnit}`;
+        document.getElementById('statScene').innerHTML = `<em>Querying Planetary Computer S5P ${gasId.toUpperCase()}...</em>`;
+
+        try {
+          const startDate = '2023-01-01';
+          const endDate = '2023-12-31';
+          const s5pFeats = await AQ.searchS5pStac(currentBbox, gasId, startDate, endDate, 10);
+
+          if (!s5pFeats || s5pFeats.length === 0) {
+            throw new Error(`No Sentinel-5P ${gasId.toUpperCase()} orbits found for this area.`);
+          }
+
+          const feat = s5pFeats[0];
+          const rawHref = feat.assets[pDef.assetKey]?.href;
+          if (!rawHref) throw new Error(`Asset ${pDef.assetKey} not found in S5P feature.`);
+
+          const dt = feat.properties.datetime ? feat.properties.datetime.substring(0, 10) : '2023';
+          document.getElementById('statScene').textContent = `${feat.id.substring(0, 22)}… (${dt})`;
+
+          const buf = await AQ.signAndFetchS5pBuffer(rawHref);
+          const gridded = await AQ.gridS5pNetCdfBuffer(buf, gasId, currentBbox, w, h);
+          grid = gridded.indexGrid;
+          validCount = gridded.validCells;
+          sum = Number.isFinite(gridded.mean) ? gridded.mean * validCount : 0;
+          minVal = gridded.min;
+          maxVal = gridded.max;
+
+          for (let idx = 0; idx < total; idx++) {
+            const val = grid[idx];
+            const rgba = AQ.colorizeAqMetric(val, gasId, false);
+            const p = idx * 4;
+            imgData.data[p] = rgba[0];
+            imgData.data[p + 1] = rgba[1];
+            imgData.data[p + 2] = rgba[2];
+            imgData.data[p + 3] = rgba[3];
+          }
+        } catch (err) {
+          console.warn('S5P live fetch error:', err.message, '; using fallback synthetic raster.');
+          document.getElementById('statScene').innerHTML = `<span style="color:var(--warning); font-size:11px;">Fallback: ${err.message}</span>`;
+          computeSyntheticRaster(grid, imgData, gasId, w, h);
+          for (let i = 0; i < total; i++) {
+            const v = grid[i];
+            if (Number.isFinite(v)) {
+              sum += v; validCount++;
+              if (v > maxVal) maxVal = v;
+              if (v < minVal) minVal = v;
+            }
+          }
+        }
+      } else if (isLive) {
         document.getElementById('statScene').innerHTML = '<em>Querying STAC &amp; COG byte-ranges...</em>';
         try {
           const presetKey = areaPresetSelect.value;
@@ -681,10 +753,10 @@
 
       // Diagnostics & Stats
       const meanVal = validCount > 0 ? (sum / validCount) : NaN;
-      const diag = AQ.diagnoseAirQualityGrid(grid, metric);
+      const diag = isS5pMode ? { isConstantFallback: false, category: 'TROPOMI Swath Gridded' } : AQ.diagnoseAirQualityGrid(grid, metric);
 
-      document.getElementById('statMean').textContent = Number.isFinite(meanVal) ? meanVal.toFixed(3) : 'NaN';
-      document.getElementById('statMax').textContent = Number.isFinite(maxVal) ? maxVal.toFixed(3) : 'NaN';
+      document.getElementById('statMean').textContent = Number.isFinite(meanVal) ? `${meanVal.toFixed(2)}${unitLabel}` : 'NaN';
+      document.getElementById('statMax').textContent = Number.isFinite(maxVal) ? `${maxVal.toFixed(2)}${unitLabel}` : 'NaN';
 
       const retBadge = document.getElementById('statRetrieval');
       if (diag.isConstantFallback) {
@@ -697,7 +769,14 @@
       const catEl = document.getElementById('statCategory');
       let cat = "Good / Clean";
       let badgeClass = "badge-ok";
-      if (metric === 's2_aot') {
+      if (isS5pMode) {
+        const gasId = isS5pMetric ? metric : 'no2';
+        const pDef = AQ.S5P_PRODUCTS[gasId];
+        const breaks = pDef?.scale?.breaks || [10, 20, 30, 40];
+        if (meanVal > breaks[2]) { cat = `Elevated S5P ${gasId.toUpperCase()}`; badgeClass = "badge-danger"; }
+        else if (meanVal > breaks[1]) { cat = `Moderate S5P ${gasId.toUpperCase()}`; badgeClass = "badge-warn"; }
+        else { cat = `Normal S5P ${gasId.toUpperCase()}`; badgeClass = "badge-ok"; }
+      } else if (metric === 's2_aot') {
         if (meanVal > 0.6) { cat = "Hazardous / High AOT"; badgeClass = "badge-danger"; }
         else if (meanVal > 0.3) { cat = "Moderate / Elevated AOT"; badgeClass = "badge-warn"; }
       } else if (metric === 'pm25_proxy') {

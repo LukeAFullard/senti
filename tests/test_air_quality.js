@@ -173,6 +173,58 @@ assert.strictEqual(mockHost.getNativeResolution({}, 'blue'), 10, 'other bands sh
 
 console.log('✓ Host application registration and wrapping verified.');
 
-console.log('\n========================================');
-console.log('All air quality tests passed successfully!');
-console.log('========================================');
+console.log('--- 8. Testing Worker & Legend Wrappers in Senti App Integration ---');
+let workerCalledWith = null;
+const hostWithWorkerAndLegend = {
+  INDEX_DEFS: {},
+  COLOR_STRETCH_SCALES: {},
+  runCpuWorkerTask: function (type, payload) {
+    workerCalledWith = { type, payload };
+    return Promise.resolve({ ok: true });
+  },
+  legend: {
+    style: { display: 'none' },
+    innerHTML: ''
+  },
+  updateLegend: function (mode, isDiff) {
+    this.legend.style.display = 'none';
+  }
+};
+
+AQ.registerWithSentiApp(hostWithWorkerAndLegend);
+
+async function testWorkerAndLegend() {
+  // Test runCpuWorkerTask rejects for AQ metrics
+  let caughtWorkerErr = null;
+  try {
+    await hostWithWorkerAndLegend.runCpuWorkerTask('index-grid', { mode: 's2_aot' });
+  } catch (err) {
+    caughtWorkerErr = err;
+  }
+  assert(caughtWorkerErr !== null, 'runCpuWorkerTask should reject for air quality metrics');
+  assert.strictEqual(caughtWorkerErr.message, 'AQ_MAIN_THREAD_DELEGATE');
+
+  // Test runCpuWorkerTask delegates for non-AQ tasks
+  const res = await hostWithWorkerAndLegend.runCpuWorkerTask('index-grid', { mode: 'ndvi' });
+  assert.strictEqual(res.ok, true, 'runCpuWorkerTask should delegate for non-AQ metrics');
+  assert.strictEqual(workerCalledWith.payload.mode, 'ndvi');
+
+  // Test updateLegend renders and sets display flex for AQ metric
+  hostWithWorkerAndLegend.updateLegend('s2_aot', false);
+  assert.strictEqual(hostWithWorkerAndLegend.legend.style.display, 'flex', 'Legend display should be flex for AQ metric');
+  assert(hostWithWorkerAndLegend.legend.innerHTML.includes('AOT'), 'Legend innerHTML should include AQ metric label');
+
+  // Test updateLegend delegates for non-AQ metric
+  hostWithWorkerAndLegend.updateLegend('unknown_metric', false);
+  assert.strictEqual(hostWithWorkerAndLegend.legend.style.display, 'none', 'Legend should delegate to original updateLegend for non-AQ metric');
+  console.log('✓ Worker interception and legend wrapper verified.');
+
+  console.log('\n========================================');
+  console.log('All air quality tests passed successfully!');
+  console.log('========================================');
+}
+
+testWorkerAndLegend().catch(err => {
+  console.error('Test failed:', err);
+  process.exit(1);
+});

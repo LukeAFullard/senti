@@ -49,6 +49,13 @@
       nativeResolutionM: 20,
       units: 'dimensionless (τ₅₅₀)',
       scale: { min: 0.0, max: 1.0, breaks: [0.1, 0.25, 0.45, 0.7] },
+      legendItems: [
+        ['#91144b', 'Severe plume (> 0.70)'],
+        ['#eb732d', 'Polluted / smoke (0.45–0.70)'],
+        ['#f0cd4b', 'Moderate haze (0.25–0.45)'],
+        ['#6ec387', 'Low aerosol (0.10–0.25)'],
+        ['#2891c3', 'Clean background (< 0.10)']
+      ],
       defaultAssetScale: { scale: 0.001, offset: 0, nodata: 0 },
       isProxy: false,
       description: 'Sen2Cor DDV-derived column aerosol optical thickness at 550nm. Values <0.1 indicate clean air; >0.4 indicate heavy haze, smoke, or dust. Note: Sen2Cor defaults to ~0.20 if Dark Dense Vegetation pixels are absent.'
@@ -61,6 +68,13 @@
       nativeResolutionM: 20,
       units: 'g/cm² (precipitable cm)',
       scale: { min: 0.0, max: 5.0, breaks: [0.8, 1.6, 2.6, 3.8] },
+      legendItems: [
+        ['#142d82', 'Very humid (> 3.8 g/cm²)'],
+        ['#2369c3', 'High moisture (2.6–3.8)'],
+        ['#41afd7', 'Humid (1.6–2.6)'],
+        ['#91cd9b', 'Moderate (0.8–1.6)'],
+        ['#d7be7d', 'Dry column (< 0.8)']
+      ],
       defaultAssetScale: { scale: 0.001, offset: 0, nodata: 0 },
       isProxy: false,
       description: 'Column-integrated atmospheric water vapour derived from Sentinel-2 B09 (945nm). Critical for evaluating hygroscopic aerosol swelling.'
@@ -73,6 +87,13 @@
       nativeResolutionM: 60,
       units: 'normalized index (-1 to 1)',
       scale: { min: -0.25, max: 0.35, breaks: [-0.08, 0.0, 0.08, 0.18] },
+      legendItems: [
+        ['#9b1946', 'High shortwave scattering (> 0.18)'],
+        ['#eb7d32', 'Elevated (0.08–0.18)'],
+        ['#ebd25a', 'Moderate (0.00–0.08)'],
+        ['#69b49b', 'Low (-0.08–0.00)'],
+        ['#2d6ea5', 'Minimal (< -0.08)']
+      ],
       isProxy: true,
       description: 'Normalized difference between Coastal Aerosol (443nm) and Blue (490nm). Highlights enhanced shortwave Rayleigh/Mie scattering from fine-mode aerosols.'
     },
@@ -84,6 +105,13 @@
       nativeResolutionM: 60,
       units: 'normalized index (-1 to 1)',
       scale: { min: -0.35, max: 0.35, breaks: [-0.15, -0.02, 0.08, 0.2] },
+      legendItems: [
+        ['#9b1946', 'Strong haze signal (> 0.18)'],
+        ['#eb7d32', 'Elevated (0.08–0.18)'],
+        ['#ebd25a', 'Moderate (0.00–0.08)'],
+        ['#69b49b', 'Low (-0.08–0.00)'],
+        ['#2d6ea5', 'Clear (< -0.08)']
+      ],
       isProxy: true,
       description: 'Normalized difference between Coastal Aerosol (443nm) and Green (560nm). Provides wider spectral leverage for mapping urban smog and regional haze.'
     },
@@ -95,6 +123,13 @@
       nativeResolutionM: 60,
       units: 'normalized index (-1 to 1)',
       scale: { min: -0.5, max: 0.7, breaks: [-0.15, 0.05, 0.25, 0.45] },
+      legendItems: [
+        ['#8c1455', 'Core fine smoke plume (> 0.45)'],
+        ['#e66e2d', 'Dense smoke (0.25–0.45)'],
+        ['#ebcd55', 'Thin smoke / haze (0.05–0.25)'],
+        ['#5a9b87', 'Clear land (-0.15–0.05)'],
+        ['#785f46', 'Bare soil / SWIR bright (< -0.15)']
+      ],
       isProxy: true,
       description: 'Exploits strong Mie scattering of fine combustion smoke at 443nm (B01) versus high transparency at 2190nm (B12) to separate smoke plumes from soil and clouds.'
     },
@@ -106,6 +141,13 @@
       nativeResolutionM: 60,
       units: 'normalized index (-1 to 1)',
       scale: { min: -0.4, max: 0.6, breaks: [-0.1, 0.08, 0.22, 0.38] },
+      legendItems: [
+        ['#9b4119', 'Heavy coarse dust (> 0.38)'],
+        ['#d77d32', 'Elevated dust/soil (0.22–0.38)'],
+        ['#e6c35f', 'Moderate (0.08–0.22)'],
+        ['#7db98c', 'Low (-0.10–0.08)'],
+        ['#3782b9', 'Fine/clear (< -0.10)']
+      ],
       isProxy: true,
       description: 'Contrasts SWIR1 (1610nm) scattering against 443nm absorption/scattering to distinguish coarse mineral dust/ash plumes from fine-mode smoke.'
     },
@@ -117,6 +159,13 @@
       nativeResolutionM: 20,
       units: 'relative µg/m³ proxy',
       scale: { min: 0, max: 150, breaks: [12, 35, 55, 100] },
+      legendItems: [
+        ['#7d145f', 'Very Unhealthy / Hazardous (> 100)'],
+        ['#c3232d', 'Unhealthy (55–100)'],
+        ['#f0822d', 'Unhealthy for Sensitive (35–55)'],
+        ['#ebcd46', 'Moderate (12–35)'],
+        ['#2da573', 'Good (< 12)']
+      ],
       isProxy: true,
       description: 'Screening-level surface PM2.5 proxy combining AOT₅₅₀ with a WVP hygroscopic growth correction and assumed boundary-layer height. Requires local ground calibration.'
     }
@@ -490,7 +539,64 @@
       }
     }
 
-    // 3. Wrap `getAssetBandInfo` so `aot` and `wvp` use Sen2Cor quantification (scale=0.001, offset=0)
+    // 3. Wrap `runCpuWorkerTask` so air quality modes bypass the hardcoded worker
+    // and cleanly fall back to the main thread where calculateIndexValue is registered.
+    if (typeof host.runCpuWorkerTask === 'function' && !host.runCpuWorkerTask._aqWrapped) {
+      const origRunCpuWorkerTask = host.runCpuWorkerTask;
+      host.runCpuWorkerTask = function (type, payload) {
+        if (type === 'index-grid' && payload && Object.prototype.hasOwnProperty.call(AQ_METRICS, payload.mode)) {
+          return Promise.reject(new Error('AQ_MAIN_THREAD_DELEGATE'));
+        }
+        return origRunCpuWorkerTask.call(this, type, payload);
+      };
+      host.runCpuWorkerTask._aqWrapped = true;
+    }
+
+    // 4. Wrap `updateLegend` so Air Quality metrics display custom legend items and stretch UI
+    // rather than being hidden by the local scales check in 03-composites-and-legend.js.
+    if (typeof host.updateLegend === 'function' && !host.updateLegend._aqWrapped) {
+      const origUpdateLegend = host.updateLegend;
+      host.updateLegend = function (mode, isDiff) {
+        if (!Object.prototype.hasOwnProperty.call(AQ_METRICS, mode)) {
+          return origUpdateLegend.call(this, mode, isDiff);
+        }
+        const legendEl = (typeof host.legend !== 'undefined' && host.legend)
+          ? host.legend
+          : (typeof document !== 'undefined' ? document.getElementById('legend') : null);
+        if (!legendEl) return;
+
+        if (isDiff) {
+          let t1 = 0.04, t2 = 0.15;
+          if (mode === 's2_wvp') { t1 = 0.2; t2 = 0.7; }
+          else if (mode === 'pm25_proxy') { t1 = 5; t2 = 20; }
+          const fmt = v => Number(v).toFixed(v < 0.1 ? 2 : 1);
+          legendEl.innerHTML = `<strong>Δ ${AQ_METRICS[mode].shortLabel} (Change)</strong>
+        <div class="legend-item"><div class="color-box" style="background:#af142d;"></div>Strong Increase / Plume (+${fmt(t2)}+)</div>
+        <div class="legend-item"><div class="color-box" style="background:#f08c37;"></div>Moderate Increase (+${fmt(t1)} to +${fmt(t2)})</div>
+        <div class="legend-item"><div class="color-box" style="background:#e1e1e1;"></div>Minor Change (-${fmt(t1)} to +${fmt(t1)})</div>
+        <div class="legend-item"><div class="color-box" style="background:#5ab9d7;"></div>Moderate Decrease (-${fmt(t2)} to -${fmt(t1)})</div>
+        <div class="legend-item"><div class="color-box" style="background:#146eb4;"></div>Strong Decrease / Clearing (&lt; -${fmt(t2)})</div>`;
+          legendEl.style.display = 'flex';
+          return;
+        }
+
+        const def = AQ_METRICS[mode];
+        if (typeof host.ensureLegendStretch === 'function' && typeof host.customLegendMarkup === 'function' && typeof host.updateLegendStretchUI === 'function') {
+          host.ensureLegendStretch(mode, host.activeRenderedState?.raw?.indexGrid);
+          legendEl.innerHTML = `<strong>${def.shortLabel} — ${def.units}</strong>` +
+            host.customLegendMarkup(mode) +
+            `<p class="small-note">${def.description}</p>` +
+            host.updateLegendStretchUI(mode, isDiff);
+        } else {
+          legendEl.innerHTML = `<strong>${def.shortLabel} Scale</strong>` +
+            def.legendItems.map(([col, lbl]) => `<div class="legend-item"><div class="color-box" style="background:${col};"></div>${lbl}</div>`).join('');
+        }
+        legendEl.style.display = 'flex';
+      };
+      host.updateLegend._aqWrapped = true;
+    }
+
+    // 5. Wrap `getAssetBandInfo` so `aot` and `wvp` use Sen2Cor quantification (scale=0.001, offset=0)
     // when STAC `raster:bands` metadata is omitted by a provider.
     if (typeof host.getAssetBandInfo === 'function' && !host.getAssetBandInfo._aqWrapped) {
       const origGetAssetBandInfo = host.getAssetBandInfo;

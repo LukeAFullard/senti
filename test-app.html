@@ -519,7 +519,7 @@
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          collections: ['sentinel-2-l2a'],
+          collections: ['sentinel-2-c1-l2a'],
           intersects: aoiGeom,
           datetime: dateRange || '2023-01-01T00:00:00Z/2023-12-31T23:59:59Z',
           query: { 'eo:cloud_cover': { lt: 30 } },
@@ -690,13 +690,15 @@
               throw new Error(`Asset ${bk} not available in STAC item.`);
             }
             const rawRaster = await readStacBandWindow(assetObj.href, currentBbox, w, h, scene);
-            // Apply scale (typically 0.001 for AOT/WVP and 0.0001 for surface reflectance)
-            const scale = assetObj['raster:bands']?.[0]?.scale || (bk === 'aot' || bk === 'wvp' ? 0.001 : 0.0001);
-            const nodata = assetObj['raster:bands']?.[0]?.nodata ?? 0;
+            const bandMeta = assetObj['raster:bands']?.[0];
+            const isAtm = (bk === 'aot' || bk === 'wvp');
+            const scale = (bandMeta && Number.isFinite(Number(bandMeta.scale))) ? Number(bandMeta.scale) : (isAtm ? 0.001 : 0.0001);
+            const offset = (bandMeta && Number.isFinite(Number(bandMeta.offset))) ? Number(bandMeta.offset) : (isAtm ? 0.0 : -0.1);
+            const nodata = (bandMeta && bandMeta.nodata !== undefined) ? Number(bandMeta.nodata) : 0;
             const scaled = new Float32Array(rawRaster.length);
             for (let i = 0; i < rawRaster.length; i++) {
-              const r = rawRaster[i];
-              scaled[i] = (r === nodata || !Number.isFinite(r)) ? NaN : r * scale;
+              const r = Number(rawRaster[i]);
+              scaled[i] = (r === nodata || !Number.isFinite(r)) ? NaN : r * scale + offset;
             }
             bandBuffers[bk] = scaled;
           }
@@ -819,6 +821,12 @@
             val = Math.max(0, Math.min(1.0, val * 1.2));
           } else if (metric === 's2_wvp') {
             val = 1.2 + val * 2.5;
+          }
+
+          if (AQ.S5P_PRODUCTS && AQ.S5P_PRODUCTS[metric]) {
+            const s = AQ.S5P_PRODUCTS[metric].scale;
+            const norm = Math.max(0, Math.min(1, val));
+            val = s.min + norm * (s.max - s.min);
           }
 
           grid[idx] = val;

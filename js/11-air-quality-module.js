@@ -1186,6 +1186,11 @@
         if (s5pStatus) s5pStatus.textContent = 'S5P overlay cleared.';
       }
 
+      host.clearS5pOverlay = clearS5p;
+      if (typeof window !== 'undefined') {
+        window.clearS5pOverlay = clearS5p;
+      }
+
       function renderS5pLegend(gasId, gridded) {
         if (!s5pLegend) return;
         const p = S5P_PRODUCTS[gasId];

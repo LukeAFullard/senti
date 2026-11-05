@@ -23,6 +23,7 @@ The app's existing HTML and CSS are preserved. External libraries and data provi
 | File | Responsibility | Coupling / notes |
 |---|---|---|
 | `js/core/00-toolkit-core.js` | Pure geospatial, statistical, caching, and export utilities | Zero-DOM pure core module; UMD export |
+| `js/core/00-stac-and-cog-reader.js` | DOM-free STAC search pagination, UTM CRS detection, and GeoTIFF window reader | Standalone STAC and Cloud-Optimized GeoTIFF reader module; UMD export |
 | `js/01-runtime-and-map.js` | GIF encoder, DOM references, shared state, map setup, drawing/point interaction and common helpers | Foundational; currently owns many globals and DOM bindings |
 | `js/02-raster-and-index-analysis.js` | Raster access, CRS/pixel-window calculations, Sentinel-2 band reads, index formulas and OPTRAM calculations | Uses shared AOI, settings and cache state; good candidate for API extraction |
 | `js/03-composites-and-legend.js` | Temporal composites, support counts, legend range/stretch and colour mapping | Depends on raster/index result shapes and UI controls |

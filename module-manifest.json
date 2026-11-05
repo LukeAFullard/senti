@@ -8,6 +8,10 @@
       "responsibility": "Pure, zero-DOM-dependency geospatial, statistical, caching, and export utilities"
     },
     {
+      "path": "js/core/00-stac-and-cog-reader.js",
+      "responsibility": "DOM-free STAC search pagination, UTM CRS detection, and GeoTIFF window reader"
+    },
+    {
       "path": "js/01-runtime-and-map.js",
       "responsibility": "Runtime, DOM references, shared state, map setup and interaction"
     },

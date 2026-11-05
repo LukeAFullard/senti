@@ -4,6 +4,10 @@
   "script_type": "classic-ordered",
   "scripts": [
     {
+      "path": "js/core/00-toolkit-core.js",
+      "responsibility": "Pure, zero-DOM-dependency geospatial, statistical, caching, and export utilities"
+    },
+    {
       "path": "js/01-runtime-and-map.js",
       "responsibility": "Runtime, DOM references, shared state, map setup and interaction"
     },

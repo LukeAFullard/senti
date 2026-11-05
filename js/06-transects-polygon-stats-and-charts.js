@@ -53,17 +53,7 @@
     return { labels, values, numSamples: geom.numSamples };
   }
 
-  function pointInProjectedPolygon(x, y, ring) {
-    let inside = false;
-    for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
-      const xi = ring[i][0], yi = ring[i][1];
-      const xj = ring[j][0], yj = ring[j][1];
-      const crosses = ((yi > y) !== (yj > y)) &&
-        (x < ((xj - xi) * (y - yi)) / ((yj - yi) || 1e-30) + xi);
-      if (crosses) inside = !inside;
-    }
-    return inside;
-  }
+  const pointInProjectedPolygon = window.SentiToolkitCore.pointInPolygon;
 
   function summarizePolygon(rawObj, grid, polygonCoords = probePolygon) {
     if (!rawObj || !grid || !polygonCoords || polygonCoords.length < 3) return null;

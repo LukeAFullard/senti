@@ -6,77 +6,7 @@
 
   // Temporal Composite Engine (Mean, Median, Max, Min, Percentile)
   // ============================================================================
-  function calcArrayStat(validVals, count, stat, pVal) {
-    if (count === 0) return NaN;
-    if (stat === 'mean') {
-      let sum = 0;
-      for (let i = 0; i < count; i++) sum += validVals[i];
-      return sum / count;
-    }
-    if (stat === 'max') {
-      let m = -Infinity;
-      for (let i = 0; i < count; i++) if (validVals[i] > m) m = validVals[i];
-      return m;
-    }
-    if (stat === 'min') {
-      let m = Infinity;
-      for (let i = 0; i < count; i++) if (validVals[i] < m) m = validVals[i];
-      return m;
-    }
-    // Quickselect algorithm to find kth element (0-indexed)
-    function quickSelect(arr, left, right, k) {
-      while (left < right) {
-        const pivotIndex = left + Math.floor(Math.random() * (right - left + 1));
-        const pivotValue = arr[pivotIndex];
-        arr[pivotIndex] = arr[right];
-        arr[right] = pivotValue;
-
-        let storeIndex = left;
-        for (let i = left; i < right; i++) {
-          if (arr[i] < pivotValue) {
-            const temp = arr[i];
-            arr[i] = arr[storeIndex];
-            arr[storeIndex] = temp;
-            storeIndex++;
-          }
-        }
-        arr[right] = arr[storeIndex];
-        arr[storeIndex] = pivotValue;
-
-        if (k === storeIndex) {
-          return arr[k];
-        } else if (k < storeIndex) {
-          right = storeIndex - 1;
-        } else {
-          left = storeIndex + 1;
-        }
-      }
-      return arr[k];
-    }
-
-    const sub = validVals.subarray(0, count);
-    const q = stat === 'median' ? 0.5 : Math.max(0.01, Math.min(0.99, pVal / 100));
-    const pos = (count - 1) * q;
-    const base = Math.floor(pos);
-    const rest = pos - base;
-
-    const val1 = quickSelect(sub, 0, count - 1, base);
-
-    // For fractional percentiles, we need the next largest element too
-    if (rest > 0 && base + 1 < count) {
-      // Find the minimum value in the rest of the array (elements > val1)
-      // Since quickSelect partially sorted the array, elements > val1 are at indices > base
-      let val2 = Infinity;
-      for (let i = base + 1; i < count; i++) {
-        if (sub[i] < val2) {
-          val2 = sub[i];
-        }
-      }
-      return val1 + rest * (val2 - val1);
-    }
-
-    return val1;
-  }
+  const calcArrayStat = window.SentiToolkitCore.calcArrayStat;
 
   function getStatShortLabel() {
     const st = compositeStat.value;

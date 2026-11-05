@@ -23,6 +23,8 @@ assert(typeof AQ.ensureH5Wasm === 'function', 'ensureH5Wasm must be a function')
 assert(typeof AQ.gridS5pNetCdfBuffer === 'function', 'gridS5pNetCdfBuffer must be a function');
 assert(typeof AQ.searchS5pStac === 'function', 'searchS5pStac must be a function');
 assert(typeof AQ.signAndFetchS5pBuffer === 'function', 'signAndFetchS5pBuffer must be a function');
+assert(typeof AQ.loadSentinel2AqSeries === 'function', 'loadSentinel2AqSeries must be a function');
+assert(typeof AQ.loadSentinel5pSeries === 'function', 'loadSentinel5pSeries must be a function');
 
 const expectedMetrics = ['s2_aot', 's2_wvp', 'asi', 'ngai', 'spdi', 'cdi', 'pm25_proxy'];
 for (const m of expectedMetrics) {

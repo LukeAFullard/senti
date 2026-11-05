@@ -21,6 +21,9 @@
     clearResultOverlay();
     clearSeasonalAnomalyOverlay();
     clearRadarCompareOverlay();
+    if (typeof window !== 'undefined' && typeof window.clearS5pOverlay === 'function') {
+      window.clearS5pOverlay();
+    }
     seasonalAnomalyBtn.disabled = true;
     canvas.style.display = 'none';
     legend.style.display = 'none';

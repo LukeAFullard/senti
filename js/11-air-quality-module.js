@@ -1186,6 +1186,11 @@
         if (s5pStatus) s5pStatus.textContent = 'S5P overlay cleared.';
       }
 
+      host.clearS5pOverlay = clearS5p;
+      if (typeof window !== 'undefined') {
+        window.clearS5pOverlay = clearS5p;
+      }
+
       function renderS5pLegend(gasId, gridded) {
         if (!s5pLegend) return;
         const p = S5P_PRODUCTS[gasId];
@@ -1468,6 +1473,180 @@
     return true;
   }
 
+  /**
+   * Loads a multi-date time-series of Sentinel-2 air quality frames.
+   *
+   * @param {Array<number>} bbox - [west, south, east, north]
+   * @param {string} metric - AQ metric key (e.g. 'aot', 'asi', etc.)
+   * @param {string} startDate - 'YYYY-MM-DD'
+   * @param {string} endDate - 'YYYY-MM-DD'
+   * @param {Object} [options]
+   * @param {number} [options.maxCloud=40]
+   * @param {number} [options.maxScenes=8]
+   * @param {number} [options.width=180]
+   * @param {number} [options.height=180]
+   * @param {boolean} [options.maskClouds=true]
+   * @returns {Promise<Array<Object>>} Standardized frame objects
+   */
+  async function loadSentinel2AqSeries(bbox, metric, startDate, endDate, options = {}) {
+    const reader = (typeof SentiStacCogReader !== 'undefined')
+      ? SentiStacCogReader
+      : (typeof window !== 'undefined' ? window.SentiStacCogReader : null);
+    if (!reader) {
+      throw new Error('SentiStacCogReader is not available.');
+    }
+
+    const def = AQ_METRICS[metric];
+    if (!def) {
+      throw new Error(`Unknown Air Quality metric: ${metric}`);
+    }
+
+    const maxCloud = options.maxCloud ?? 40;
+    const maxScenes = options.maxScenes ?? 8;
+    const width = options.width ?? 180;
+    const height = options.height ?? 180;
+    const maskClouds = options.maskClouds !== false;
+
+    const items = await reader.searchSentinel2Stac(bbox, startDate, endDate, maxCloud, 100);
+
+    // Filter items containing all required bands
+    const validItems = items.filter(item => {
+      const assets = item?.assets || {};
+      return def.bands.every(b => Boolean(assets[b]?.href));
+    });
+
+    // Deduplicate by UTC date (YYYY-MM-DD), keeping lowest-cloud tile per date
+    const dateMap = new Map();
+    for (const item of validItems) {
+      const dt = item?.properties?.datetime || item?.id;
+      const dateStr = dt ? dt.slice(0, 10) : '';
+      if (!dateStr) continue;
+      const cc = Number(item?.properties?.['eo:cloud_cover'] ?? 999);
+      if (!dateMap.has(dateStr) || cc < (dateMap.get(dateStr).cloudCover ?? 999)) {
+        dateMap.set(dateStr, { item, dateStr, cloudCover: cc });
+      }
+    }
+
+    const sortedDates = Array.from(dateMap.values()).sort((a, b) => a.dateStr.localeCompare(b.dateStr));
+
+    // Subsample evenly down to maxScenes
+    let selected = sortedDates;
+    if (sortedDates.length > maxScenes) {
+      selected = [];
+      const step = (sortedDates.length - 1) / (maxScenes - 1);
+      for (let s = 0; s < maxScenes; s++) {
+        const idx = Math.min(sortedDates.length - 1, Math.round(s * step));
+        if (!selected.includes(sortedDates[idx])) {
+          selected.push(sortedDates[idx]);
+        }
+      }
+    }
+
+    const frames = [];
+    for (const entry of selected) {
+      const { item, dateStr } = entry;
+      const bandMap = {};
+      for (const b of def.bands) {
+        bandMap[b] = await reader.readCogBandToGrid(item.assets[b], item, bbox, width, height);
+      }
+
+      let mask = null;
+      if (maskClouds) {
+        mask = await reader.readCogSclMask(item, bbox, width, height);
+      }
+
+      const computed = computeMetricGrid(metric, bandMap, { mask });
+
+      frames.push({
+        id: item.id,
+        dateStr,
+        label: `${dateStr} (S2 ${def.shortLabel})`,
+        grid: computed.indexGrid,
+        width,
+        height,
+        bbox: bbox.slice(),
+        units: def.units,
+        shortLabel: def.shortLabel,
+        mode: metric,
+        sensor: 's2'
+      });
+    }
+
+    return frames;
+  }
+
+  /**
+   * Loads a multi-date time-series of Sentinel-5P trace gas frames.
+   *
+   * @param {Array<number>} bbox - [west, south, east, north]
+   * @param {string} gasId - S5P gas product key (e.g. 'no2', 'ch4', etc.)
+   * @param {string} startDate - 'YYYY-MM-DD'
+   * @param {string} endDate - 'YYYY-MM-DD'
+   * @param {Object} [options]
+   * @param {number} [options.maxScenes=8]
+   * @param {number} [options.width=180]
+   * @param {number} [options.height=180]
+   * @returns {Promise<Array<Object>>} Standardized frame objects
+   */
+  async function loadSentinel5pSeries(bbox, gasId, startDate, endDate, options = {}) {
+    const productDef = S5P_PRODUCTS[gasId];
+    if (!productDef) {
+      throw new Error(`Unknown Sentinel-5P product: ${gasId}`);
+    }
+
+    const maxScenes = options.maxScenes ?? 8;
+    const width = options.width ?? 180;
+    const height = options.height ?? 180;
+
+    const features = await searchS5pStac(bbox, gasId, startDate, endDate, 60);
+
+    // Sort chronological ascending
+    features.sort((a, b) => {
+      const ta = new Date(a.properties.datetime || a.id).getTime();
+      const tb = new Date(b.properties.datetime || b.id).getTime();
+      return ta - tb;
+    });
+
+    // Subsample evenly down to maxScenes
+    let selected = features;
+    if (features.length > maxScenes) {
+      selected = [];
+      const step = (features.length - 1) / (maxScenes - 1);
+      for (let s = 0; s < maxScenes; s++) {
+        const idx = Math.min(features.length - 1, Math.round(s * step));
+        if (!selected.includes(features[idx])) {
+          selected.push(features[idx]);
+        }
+      }
+    }
+
+    const frames = [];
+    for (const feat of selected) {
+      const dt = feat.properties.datetime || feat.id;
+      const dateStr = dt ? dt.slice(0, 10) : '';
+      const rawHref = feat.assets[productDef.assetKey].href;
+      const buf = await signAndFetchS5pBuffer(rawHref);
+      const gridded = await gridS5pNetCdfBuffer(buf, gasId, bbox, width, height);
+
+      frames.push({
+        id: feat.id,
+        dateStr,
+        label: `${dateStr} (S5P ${productDef.name})`,
+        grid: gridded.grid,
+        width,
+        height,
+        bbox: bbox.slice(),
+        units: productDef.displayUnit,
+        shortLabel: productDef.name,
+        mode: gasId,
+        sensor: 's5p',
+        matchedFootprints: gridded.matchedFootprints
+      });
+    }
+
+    return frames;
+  }
+
   return {
     AQ_METRICS,
     S5P_PRODUCTS,
@@ -1481,6 +1660,8 @@
     searchS5pStac,
     signAndFetchS5pBuffer,
     colorizeAqMetric,
-    registerWithSentiApp
+    registerWithSentiApp,
+    loadSentinel2AqSeries,
+    loadSentinel5pSeries
   };
 });

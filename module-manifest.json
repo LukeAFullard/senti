@@ -54,6 +54,20 @@
     {
       "path": "js/11-air-quality-module.js",
       "responsibility": "Air quality remote sensing metrics, Sen2Cor DDV fallback diagnostics, and atmospheric index calculations"
+    },
+    {
+      "path": "js/apps/aq-dashboard-app.js",
+      "responsibility": "Standalone public air quality observatory application controller logic"
+    }
+  ],
+  "apps": [
+    {
+      "entry": "index.html",
+      "responsibility": "Modular main Sentinel satellite monitoring application"
+    },
+    {
+      "entry": "air-quality-dashboard.html",
+      "responsibility": "Standalone public air quality observatory application"
     }
   ],
   "status": "phase-1 extraction; shared global scope remains"

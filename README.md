@@ -35,6 +35,8 @@ The app's existing HTML and CSS are preserved. External libraries and data provi
 | `js/09-seasonal-anomaly-and-radar-discovery.js` | Seasonal anomaly calculations/overlays/exports and Sentinel-1 discovery/access helpers | Radar provider access is optional and may be restricted; anomaly calculation is satellite-only |
 | `js/10-radar-rendering-and-comparison.js` | Sentinel-1 raster loading/rendering, optical-radar comparison and radar UI event handlers | Optional feature, but currently references core state and specific DOM controls |
 | `js/11-air-quality-module.js` | Air quality remote sensing metrics (AOT, WVP, ASI, NGAI, SPDI, CDI, PM2.5 proxy), Sen2Cor DDV fallback diagnostics, and trace-gas units | Standalone typed-array module with optional Senti app adapter |
+| `js/apps/aq-dashboard-app.js` | Standalone public air quality observatory controller | Client-side dashboard logic for `air-quality-dashboard.html` using core toolkit modules |
+| `air-quality-dashboard.html` | Public Air Quality Observatory web application | Standalone multi-spectral Sentinel-2 & Sentinel-5P air quality interface |
 
 ## Dependency direction intended for the next refactor
 

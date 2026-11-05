@@ -9,129 +9,7 @@
   // ============================================================================
   // Self-Contained GIF89a Encoder (Zero External Dependencies)
   // ============================================================================
-  function encodeAnimatedGIF(canvases, delayCs = 80) {
-    const width = canvases[0].width;
-    const height = canvases[0].height;
-    const bytes = [];
-    const writeByte = b => bytes.push(b & 0xff);
-    const writeShort = s => { writeByte(s); writeByte(s >> 8); };
-    const writeStr = s => { for (let i = 0; i < s.length; i++) writeByte(s.charCodeAt(i)); };
-
-    writeStr('GIF89a');
-    writeShort(width);
-    writeShort(height);
-    writeByte(0x70);
-    writeByte(0);
-    writeByte(0);
-
-    writeByte(0x21); writeByte(0xff); writeByte(11);
-    writeStr('NETSCAPE2.0');
-    writeByte(3); writeByte(1); writeShort(0); writeByte(0);
-
-    const palette = [];
-    for (let r = 0; r < 6; r++) {
-      for (let g = 0; g < 6; g++) {
-        for (let b = 0; b < 6; b++) {
-          palette.push([Math.round(r * 255 / 5), Math.round(g * 255 / 5), Math.round(b * 255 / 5)]);
-        }
-      }
-    }
-    while (palette.length < 256) palette.push([0, 0, 0]);
-
-    function lzwEncode(indices, minCodeSize) {
-      const out = [];
-      const clearCode = 1 << minCodeSize;
-      const eoiCode = clearCode + 1;
-      let codeSize = minCodeSize + 1;
-      let nextCode = eoiCode + 1;
-      let dict = new Map();
-      let bitBuf = 0, bitCnt = 0;
-
-      const emit = code => {
-        bitBuf |= (code << bitCnt);
-        bitCnt += codeSize;
-        while (bitCnt >= 8) {
-          out.push(bitBuf & 0xff);
-          bitBuf >>= 8;
-          bitCnt -= 8;
-        }
-      };
-
-      emit(clearCode);
-      let prefix = indices[0];
-      for (let i = 1; i < indices.length; i++) {
-        const k = indices[i];
-        const key = (prefix << 8) | k;
-        const found = dict.get(key);
-        if (found !== undefined) {
-          prefix = found;
-        } else {
-          emit(prefix);
-          if (nextCode < 4096) {
-            dict.set(key, nextCode++);
-            if (nextCode > (1 << codeSize) && codeSize < 12) codeSize++;
-          } else {
-            emit(clearCode);
-            dict.clear();
-            codeSize = minCodeSize + 1;
-            nextCode = eoiCode + 1;
-          }
-          prefix = k;
-        }
-      }
-      emit(prefix);
-      emit(eoiCode);
-      if (bitCnt > 0) out.push(bitBuf & 0xff);
-      return out;
-    }
-
-    for (const srcCanvas of canvases) {
-      const ctx = srcCanvas.getContext('2d');
-      const imgData = ctx.getImageData(0, 0, width, height).data;
-      const indices = new Uint8Array(width * height);
-
-      for (let i = 0, p = 0; i < imgData.length; i += 4, p++) {
-        if (imgData[i + 3] < 40) {
-          indices[p] = 255;
-        } else {
-          const r = Math.round(imgData[i] * 5 / 255);
-          const g = Math.round(imgData[i + 1] * 5 / 255);
-          const b = Math.round(imgData[i + 2] * 5 / 255);
-          indices[p] = r * 36 + g * 6 + b;
-        }
-      }
-
-      writeByte(0x21); writeByte(0xf9); writeByte(4);
-      writeByte(0x09);
-      writeShort(delayCs);
-      writeByte(255);
-      writeByte(0);
-
-      writeByte(0x2c);
-      writeShort(0); writeShort(0);
-      writeShort(width); writeShort(height);
-      writeByte(0x87);
-
-      for (let i = 0; i < 256; i++) {
-        writeByte(palette[i][0]);
-        writeByte(palette[i][1]);
-        writeByte(palette[i][2]);
-      }
-
-      const minCodeSize = 8;
-      writeByte(minCodeSize);
-      const compressed = lzwEncode(indices, minCodeSize);
-      for (let i = 0; i < compressed.length; i += 255) {
-        const chunk = compressed.slice(i, i + 255);
-        writeByte(chunk.length);
-        for (let j = 0; j < chunk.length; j++) writeByte(chunk[j]);
-      }
-      writeByte(0);
-    }
-
-    writeByte(0x3b);
-    return new Blob([new Uint8Array(bytes)], { type: 'image/gif' });
-  }
+  const encodeAnimatedGIF = window.SentiToolkitCore.encodeAnimatedGIF;
 
   // ============================================================================
   // DOM & Application State
@@ -592,20 +470,8 @@
   }
 
   // Run async jobs in small batches to balance network latency against memory use.
-  async function mapConcurrent(items, concurrency, worker) {
-    const results = new Array(items.length);
-    let nextIndex = 0;
-    async function runner() {
-      while (true) {
-        const index = nextIndex++;
-        if (index >= items.length) return;
-        results[index] = await worker(items[index], index);
-      }
-    }
-    const runners = Array.from({ length: Math.min(items.length, Math.max(1, concurrency)) }, () => runner());
-    await Promise.all(runners);
-    return results;
-  }
+  const mapConcurrent = window.SentiToolkitCore.mapConcurrent;
+  const LRUCache = window.SentiToolkitCore.LRUCache;
 
   proj4.defs('EPSG:3857', '+proj=merc +a=6378137 +b=6378137 +lat_ts=0 +lon_0=0 +x_0=0 +y_0=0 +k=1 +units=m +nadgrids=@null +wktext +no_defs');
 
@@ -626,35 +492,6 @@
   let validScenes = [];
   let displaySteps = [];
   let activeRenderedState = null;
-
-class LRUCache {
-  constructor(maxSize) {
-    this.maxSize = maxSize;
-    this.cache = new Map();
-  }
-  get(key) {
-    if (!this.cache.has(key)) return undefined;
-    const value = this.cache.get(key);
-    this.cache.delete(key);
-    this.cache.set(key, value);
-    return value;
-  }
-  set(key, value) {
-    if (this.cache.has(key)) {
-      this.cache.delete(key);
-    } else if (this.cache.size >= this.maxSize) {
-      const firstKey = this.cache.keys().next().value;
-      this.cache.delete(firstKey);
-    }
-    this.cache.set(key, value);
-  }
-  has(key) {
-    return this.cache.has(key);
-  }
-  clear() {
-    this.cache.clear();
-  }
-}
 
   const sceneRawCache = new LRUCache(12);
   const compositeCache = new LRUCache(6);

@@ -60,64 +60,11 @@
     return (raw !== null && raw !== undefined && Number.isFinite(Number(raw))) ? Number(raw) : Infinity;
   }
 
-  function parseEpsg(value) {
-    if (!value) return null;
-    if (Number.isInteger(Number(value))) return Number(value);
-    const match = String(value).match(/(?:EPSG:)?(\d{4,6})/i);
-    return match ? Number(match[1]) : null;
-  }
-
-  function isUtmEpsg(code) {
-    return Number.isInteger(code) && ((code >= 32601 && code <= 32660) || (code >= 32701 && code <= 32760));
-  }
-
-  function getRasterCrs(image, item, bbox) {
-    const properties = item?.properties || {};
-    let geoKeys = {};
-    try { if (typeof image.getGeoKeys === 'function') geoKeys = image.getGeoKeys() || {}; } catch (_) {}
-    const candidates = [parseEpsg(properties['proj:epsg']), parseEpsg(properties['proj:code']), parseEpsg(geoKeys.ProjectedCSTypeGeoKey)];
-    let epsg = candidates.find(isUtmEpsg);
-    if (!epsg) {
-      const lon = (bbox[0] + bbox[2]) / 2, lat = (bbox[1] + bbox[3]) / 2;
-      const zone = Math.min(60, Math.max(1, Math.floor((lon + 180) / 6) + 1));
-      epsg = (lat < 0 ? 32700 : 32600) + zone;
-    }
-    const zone = epsg % 100;
-    const isSouth = epsg >= 32701 && epsg <= 32760;
-    const crsName = 'EPSG:' + epsg;
-    proj4.defs(crsName, '+proj=utm +zone=' + zone + (isSouth ? ' +south' : '') + ' +datum=WGS84 +units=m +no_defs +type=crs');
-    return crsName;
-  }
-
-  function transformBboxPerimeter(bbox, sourceCrs, targetCrs, segments) {
-    const [west, south, east, north] = bbox;
-    const perimeter = [];
-    for (let i = 0; i <= segments; i++) {
-      const t = i / segments;
-      perimeter.push([west + (east - west) * t, south], [west + (east - west) * t, north], [west, south + (north - south) * t], [east, south + (north - south) * t]);
-    }
-    return perimeter.map(point => proj4(sourceCrs, targetCrs, point));
-  }
-
-  function calculatePixelWindow(bbox, image, rasterCrs) {
-    const origin = image.getOrigin();
-    const resolution = image.getResolution();
-    const imageWidth = image.getWidth(), imageHeight = image.getHeight();
-    const projected = transformBboxPerimeter(bbox, 'EPSG:4326', rasterCrs, BBOX_EDGE_SEGMENTS);
-    const pixelX = projected.map(p => (p[0] - origin[0]) / resolution[0]);
-    const pixelY = projected.map(p => (p[1] - origin[1]) / resolution[1]);
-
-    const window = [
-      Math.max(0, Math.floor(Math.min(...pixelX))),
-      Math.max(0, Math.floor(Math.min(...pixelY))),
-      Math.min(imageWidth, Math.ceil(Math.max(...pixelX))),
-      Math.min(imageHeight, Math.ceil(Math.max(...pixelY)))
-    ];
-    if (window[0] >= window[2] || window[1] >= window[3]) {
-      throw new Error('Selected rectangle does not overlap this scene.');
-    }
-    return { window, origin, resolution };
-  }
+  const parseEpsg = window.SentiStacCogReader.parseEpsg;
+  const isUtmEpsg = window.SentiStacCogReader.isUtmEpsg;
+  const getRasterCrs = window.SentiStacCogReader.getRasterCrs;
+  const transformBboxPerimeter = window.SentiStacCogReader.transformBboxPerimeter;
+  const calculatePixelWindow = window.SentiStacCogReader.calculatePixelWindow;
 
   function calculatePixelWindowForReferenceGrid(referenceGrid, image, targetCrs) {
     const origin = image.getOrigin();

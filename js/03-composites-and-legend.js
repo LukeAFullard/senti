@@ -448,6 +448,12 @@
 
   function colorizeIndex(val, mode, isDiff = false) {
     if (!Number.isFinite(val)) return [0, 0, 0, 0];
+    if (typeof AirQualityRemoteSensing !== 'undefined' && AirQualityRemoteSensing.AQ_METRICS && AirQualityRemoteSensing.AQ_METRICS[mode]) {
+      const scaledVal = (!isDiff && typeof transformedLegendValue === 'function')
+        ? transformedLegendValue(val, mode)
+        : val;
+      return AirQualityRemoteSensing.colorizeAqMetric(scaledVal, mode, isDiff);
+    }
     if (mode === 'obs_count') {
       if (val < 0.5) return [70, 70, 78, 225];
       if (val < 2.5) return [125, 190, 220, 230];

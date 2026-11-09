@@ -180,7 +180,7 @@
       id: 'no2',
       name: 'Nitrogen Dioxide (NO₂) Tropospheric Column',
       shortLabel: 'NO₂',
-      stacProduct: 'L2__NO2___',
+      stacProduct: 'no2',
       assetKey: 'no2',
       h5Var: 'PRODUCT/nitrogendioxide_tropospheric_column',
       displayUnit: 'µmol/m²',
@@ -199,7 +199,7 @@
       id: 'so2',
       name: 'Sulfur Dioxide (SO₂) Total Vertical Column',
       shortLabel: 'SO₂',
-      stacProduct: 'L2__SO2___',
+      stacProduct: 'so2',
       assetKey: 'so2',
       h5Var: 'PRODUCT/sulfurdioxide_total_vertical_column',
       displayUnit: 'µmol/m²',
@@ -218,7 +218,7 @@
       id: 'co',
       name: 'Carbon Monoxide (CO) Total Column',
       shortLabel: 'CO',
-      stacProduct: 'L2__CO____',
+      stacProduct: 'co',
       assetKey: 'co',
       h5Var: 'PRODUCT/carbonmonoxide_total_column',
       displayUnit: 'mmol/m²',
@@ -237,7 +237,7 @@
       id: 'o3',
       name: 'Ozone (O₃) Total Vertical Column',
       shortLabel: 'O₃',
-      stacProduct: 'L2__O3____',
+      stacProduct: 'o3',
       assetKey: 'o3',
       h5Var: 'PRODUCT/ozone_total_vertical_column',
       displayUnit: 'Dobson Units (DU)',
@@ -256,7 +256,7 @@
       id: 'ch4',
       name: 'Methane (CH₄) Mixing Ratio (Bias Corrected)',
       shortLabel: 'CH₄',
-      stacProduct: 'L2__CH4___',
+      stacProduct: 'ch4',
       assetKey: 'ch4',
       h5Var: 'PRODUCT/methane_mixing_ratio_bias_corrected',
       displayUnit: 'ppb',
@@ -275,7 +275,7 @@
       id: 'hcho',
       name: 'Formaldehyde (HCHO) Tropospheric Column',
       shortLabel: 'HCHO',
-      stacProduct: 'L2__HCHO__',
+      stacProduct: 'hcho',
       assetKey: 'hcho',
       h5Var: 'PRODUCT/formaldehyde_tropospheric_vertical_column',
       displayUnit: 'µmol/m²',
@@ -294,7 +294,7 @@
       id: 'aer_ai',
       name: 'UV Aerosol Index (AER_AI 354/388nm)',
       shortLabel: 'UVAI',
-      stacProduct: 'L2__AER_AI',
+      stacProduct: 'aer-ai',
       assetKey: 'aer-ai',
       h5Var: 'PRODUCT/aerosol_index_354_388',
       displayUnit: 'UVAI',
@@ -578,7 +578,17 @@
    */
   async function ensureH5Wasm() {
     if (typeof window === 'undefined') {
-      throw new Error('ensureH5Wasm can only be used in a browser environment');
+      if (typeof globalThis !== 'undefined' && globalThis.h5wasm && globalThis.h5wasm.ready) {
+        await globalThis.h5wasm.ready;
+        return globalThis.h5wasm;
+      }
+      try {
+        const mod = require('h5wasm');
+        if (mod && mod.ready) await mod.ready;
+        return mod;
+      } catch (_) {
+        throw new Error('ensureH5Wasm can only be used in a browser environment or in Node with h5wasm installed');
+      }
     }
     if (window.h5wasm && window.h5wasm.ready) {
       await window.h5wasm.ready;
@@ -751,6 +761,7 @@
         bbox: bbox.slice(),
         width: gridWidth,
         height: gridHeight,
+        grid: outGrid,
         indexGrid: outGrid,
         validCells,
         matchedFootprints,
@@ -785,12 +796,19 @@
     const startIso = startDate.includes('T') ? startDate : `${startDate}T00:00:00Z`;
     const endIso = endDate.includes('T') ? endDate : `${endDate}T23:59:59Z`;
 
+    const prodCandidates = [
+      productDef.stacProduct,
+      productDef.id,
+      productDef.id.replace('_', '-'),
+      `L2__${productDef.id.toUpperCase().replace('-', '_')}`
+    ];
+
     const body = {
       collections: ['sentinel-5p-l2-netcdf'],
       bbox: bbox,
       datetime: `${startIso}/${endIso}`,
       query: {
-        's5p:product_name': { eq: productDef.stacProduct }
+        's5p:product_name': { in: prodCandidates }
       },
       limit: limit
     };
@@ -1250,6 +1268,10 @@
         const opVal = opacitySlider ? Number(opacitySlider.value) : 0.88;
 
         const bounds = L.latLngBounds([[south, west], [north, east]]);
+        if (typeof mapInst.getPane === 'function' && !mapInst.getPane('s5pPane') && typeof mapInst.createPane === 'function') {
+          mapInst.createPane('s5pPane');
+          mapInst.getPane('s5pPane').style.zIndex = '365';
+        }
         activeS5pOverlay = L.imageOverlay(dataUrl, bounds, {
           opacity: opVal,
           pane: 's5pPane'
@@ -1489,14 +1511,18 @@
    * @returns {Promise<Array<Object>>} Standardized frame objects
    */
   async function loadSentinel2AqSeries(bbox, metric, startDate, endDate, options = {}) {
-    const reader = (typeof SentiStacCogReader !== 'undefined')
+    let reader = (typeof SentiStacCogReader !== 'undefined')
       ? SentiStacCogReader
       : (typeof window !== 'undefined' ? window.SentiStacCogReader : null);
+    if (!reader && typeof require === 'function') {
+      try { reader = require('./core/00-stac-and-cog-reader.js'); } catch (_) {}
+    }
     if (!reader) {
       throw new Error('SentiStacCogReader is not available.');
     }
 
-    const def = AQ_METRICS[metric];
+    const metricKey = (metric === 'aot') ? 's2_aot' : ((metric === 'wvp') ? 's2_wvp' : ((metric === 'pm25') ? 'pm25_proxy' : metric));
+    const def = AQ_METRICS[metricKey];
     if (!def) {
       throw new Error(`Unknown Air Quality metric: ${metric}`);
     }
@@ -1509,10 +1535,31 @@
 
     const items = await reader.searchSentinel2Stac(bbox, startDate, endDate, maxCloud, 100);
 
+    const resolveAsset = (assets, b) => {
+      if (!assets) return null;
+      if (assets[b]?.href) return assets[b];
+      const aliasMap = {
+        coastal: ['B01', 'b01', 'band01', 'b1'],
+        blue: ['B02', 'b02', 'band02', 'b2'],
+        green: ['B03', 'b03', 'band03', 'b3'],
+        red: ['B04', 'b04', 'band04', 'b4'],
+        swir16: ['B11', 'b11', 'band11'],
+        swir22: ['B12', 'b12', 'band12'],
+        aot: ['AOT', 'aerosol'],
+        wvp: ['WVP', 'water_vapour', 'water_vapor'],
+        scl: ['SCL', 'scene_classification']
+      };
+      const aliases = aliasMap[b] || [];
+      for (const al of aliases) {
+        if (assets[al]?.href) return assets[al];
+      }
+      return null;
+    };
+
     // Filter items containing all required bands
     const validItems = items.filter(item => {
       const assets = item?.assets || {};
-      return def.bands.every(b => Boolean(assets[b]?.href));
+      return def.bands.every(b => Boolean(resolveAsset(assets, b)));
     });
 
     // Deduplicate by UTC date (YYYY-MM-DD), keeping lowest-cloud tile per date
@@ -1547,7 +1594,8 @@
       const { item, dateStr } = entry;
       const bandMap = {};
       for (const b of def.bands) {
-        bandMap[b] = await reader.readCogBandToGrid(item.assets[b], item, bbox, width, height);
+        const asset = resolveAsset(item.assets, b);
+        bandMap[b] = await reader.readCogBandToGrid(asset, item, bbox, width, height);
       }
 
       let mask = null;
@@ -1555,19 +1603,20 @@
         mask = await reader.readCogSclMask(item, bbox, width, height);
       }
 
-      const computed = computeMetricGrid(metric, bandMap, { mask });
+      const computed = computeMetricGrid(metricKey, bandMap, { mask });
 
       frames.push({
         id: item.id,
         dateStr,
         label: `${dateStr} (S2 ${def.shortLabel})`,
         grid: computed.indexGrid,
+        indexGrid: computed.indexGrid,
         width,
         height,
         bbox: bbox.slice(),
         units: def.units,
         shortLabel: def.shortLabel,
-        mode: metric,
+        mode: metricKey,
         sensor: 's2'
       });
     }
@@ -1631,13 +1680,14 @@
       frames.push({
         id: feat.id,
         dateStr,
-        label: `${dateStr} (S5P ${productDef.name})`,
-        grid: gridded.grid,
+        label: `${dateStr} (S5P ${productDef.shortLabel || productDef.name})`,
+        grid: gridded.grid || gridded.indexGrid,
+        indexGrid: gridded.indexGrid || gridded.grid,
         width,
         height,
         bbox: bbox.slice(),
         units: productDef.displayUnit,
-        shortLabel: productDef.name,
+        shortLabel: productDef.shortLabel || productDef.name,
         mode: gasId,
         sensor: 's5p',
         matchedFootprints: gridded.matchedFootprints

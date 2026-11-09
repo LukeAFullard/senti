@@ -203,6 +203,16 @@
           case 'fai': return b[0]-(b[1]+(b[2]-b[1])*(842-665)/(1610-665));
           case 'turbidity_ratio': return b[1]>1e-6?b[0]/b[1]:NaN;
           case 'awei_nsh': return 4*(b[0]-b[1])-(0.25*b[2]+2.75*b[3]);
+          case 'asi': case 'ngai': case 'spdi': case 'cdi': return nd(b[0],b[1]);
+          case 's2_aot': { let v=b[0]; if(v>10&&v<=10000)v*=0.001; return v>=0&&v<=5.0?v:NaN; }
+          case 's2_wvp': { let v=b[0]; if(v>20&&v<=20000)v*=0.001; return v>=0&&v<=15.0?v:NaN; }
+          case 'pm25_proxy': {
+            let a=b[0], w=b[1];
+            if(a>10&&a<=10000)a*=0.001;
+            if(w>20&&w<=20000)w*=0.001;
+            if(a<0||a>5.0||w<0) return NaN;
+            return Math.max(0, (a*85.0)/(1.0*(1.0+0.18*Math.min(5.0,Math.max(0,w)))));
+          }
           default: return NaN;
         }
       }

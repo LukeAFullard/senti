@@ -110,6 +110,15 @@
     el('aqStartDate').value = start.toISOString().slice(0, 10);
 
     presetSel.addEventListener('change', () => {
+      if (presetSel.value === 'custom') {
+        if (map) {
+          const b = map.getBounds();
+          activeBbox = [b.getWest(), b.getSouth(), b.getEast(), b.getNorth()];
+          updateBboxRectangle(activeBbox);
+          log(`Custom Area set to map view: [${activeBbox.map(v => v.toFixed(3)).join(', ')}]`);
+        }
+        return;
+      }
       const p = PRESETS[presetSel.value];
       if (p) {
         activeBbox = p.bbox.slice();
@@ -119,6 +128,16 @@
         log(`Selected preset: ${p.name}`);
       }
     });
+
+    if (map) {
+      map.on('moveend', () => {
+        if (presetSel.value === 'custom') {
+          const b = map.getBounds();
+          activeBbox = [b.getWest(), b.getSouth(), b.getEast(), b.getNorth()];
+          updateBboxRectangle(activeBbox);
+        }
+      });
+    }
 
     el('searchAndLoadBtn').addEventListener('click', handleSearchAndLoad);
     el('temporalViewMode').addEventListener('change', updateActiveDisplay);
@@ -275,6 +294,29 @@
     if (mode === 'single') {
       const idx = parseInt(el('timeSlider').value, 10);
       renderFrame(idx);
+      return;
+    }
+
+    if (mode === 'monthly') {
+      const monthGroups = new Map();
+      for (const f of loadedFrames) {
+        const ym = f.dateStr ? f.dateStr.slice(0, 7) : 'Unknown';
+        if (!monthGroups.has(ym)) monthGroups.set(ym, []);
+        monthGroups.get(ym).push(f.grid);
+      }
+      const grids = loadedFrames.map(f => f.grid);
+      let composite = SentiToolkitCore.compositeGrids(grids, stat);
+      if (diff && periodMedianGrid) {
+        const delta = new Float32Array(composite.length);
+        for (let i = 0; i < delta.length; i++) delta[i] = composite[i] - periodMedianGrid[i];
+        composite = delta;
+      }
+      activeDisplayGrid = composite;
+      const numMonths = monthGroups.size;
+      const label = `Monthly ${stat.toUpperCase()} (${numMonths} month${numMonths === 1 ? '' : 's'})`;
+      displayGridOnMap(composite, label, diff);
+      updateKpisAndLegend(composite, label, diff);
+      updateChartWithActiveFrame();
       return;
     }
 
@@ -540,7 +582,8 @@
         id: file.name,
         dateStr: new Date().toISOString().slice(0, 10),
         label: `Local NetCDF (${file.name})`,
-        grid: gridded.grid,
+        grid: gridded.grid || gridded.indexGrid,
+        indexGrid: gridded.indexGrid || gridded.grid,
         width: GRID_W,
         height: GRID_H,
         bbox: activeBbox.slice(),

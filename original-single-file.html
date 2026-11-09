@@ -1007,23 +1007,32 @@
       url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
       options: { attribution: 'Tiles &copy; Esri', maxZoom: 19, crossOrigin: 'anonymous' }
     },
+    'Esri Dark Gray Canvas': {
+      url: 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}',
+      options: { attribution: 'Tiles &copy; Esri', maxZoom: 16, crossOrigin: 'anonymous' }
+    },
     'Esri Light Gray Canvas': {
       url: 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}',
       options: { attribution: 'Tiles &copy; Esri', maxZoom: 16, crossOrigin: 'anonymous' }
     },
-    'CartoDB Dark Matter': {
-      url: 'https://a.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png',
-      options: { attribution: '&copy; CARTO', maxZoom: 19, crossOrigin: 'anonymous' }
+    'Esri World Topo Map': {
+      url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}',
+      options: { attribution: 'Tiles &copy; Esri', maxZoom: 18, crossOrigin: 'anonymous' }
     },
-    'OpenStreetMap': {
-      url: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-      options: { attribution: '&copy; OpenStreetMap', maxZoom: 19, crossOrigin: 'anonymous' }
-    },
-    'OpenTopoMap': {
-      url: 'https://a.tile.opentopomap.org/{z}/{x}/{y}.png',
-      options: { attribution: '&copy; OpenTopoMap', maxZoom: 17, crossOrigin: 'anonymous' }
+    'Esri World Street Map': {
+      url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}',
+      options: { attribution: 'Tiles &copy; Esri', maxZoom: 18, crossOrigin: 'anonymous' }
     }
   };
+
+  const legacyBasemapAliases = {
+    'CartoDB Dark Matter': 'Esri Dark Gray Canvas',
+    'OpenStreetMap': 'Esri World Street Map',
+    'OpenTopoMap': 'Esri World Topo Map'
+  };
+  if (typeof window !== 'undefined') {
+    window.legacyBasemapAliases = legacyBasemapAliases;
+  }
 
   let activeBasemapName = 'Esri World Imagery';
   const basemaps = {};
@@ -2848,7 +2857,10 @@
     const cacheKey = `${activeBasemapName}_${extent.minX.toFixed(1)}_${extent.minY.toFixed(1)}_${extent.maxX.toFixed(1)}_${extent.maxY.toFixed(1)}_${width}_${height}`;
     if (basemapCanvasCache.has(cacheKey)) return basemapCanvasCache.get(cacheKey);
 
-    const def = basemapDefs[activeBasemapName] || basemapDefs['Esri World Imagery'];
+    const resolvedBasemapName = (typeof legacyBasemapAliases !== 'undefined' && legacyBasemapAliases[activeBasemapName])
+      || (typeof window !== 'undefined' && window.legacyBasemapAliases && window.legacyBasemapAliases[activeBasemapName])
+      || activeBasemapName;
+    const def = basemapDefs[resolvedBasemapName] || basemapDefs['Esri World Imagery'];
     const maxZ = def.options.maxZoom || 18;
     const worldSize = 20037508.342789244 * 2;
     const targetRes = (extent.maxX - extent.minX) / width;

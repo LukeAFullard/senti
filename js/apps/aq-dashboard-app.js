@@ -80,17 +80,43 @@
     if (typeof L === 'undefined') return;
     const initial = PRESETS.palmerston;
     const center = [(initial.bbox[1] + initial.bbox[3]) / 2, (initial.bbox[0] + initial.bbox[2]) / 2];
-    map = L.map('map').setView(center, initial.zoom);
+    const esriBasemaps = {
+      'Esri World Imagery': L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+        maxZoom: 18,
+        attribution: 'Tiles &copy; Esri',
+        crossOrigin: 'anonymous'
+      }),
+      'Esri Dark Gray Canvas': L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}', {
+        maxZoom: 16,
+        attribution: 'Tiles &copy; Esri',
+        crossOrigin: 'anonymous'
+      }),
+      'Esri World Topo Map': L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}', {
+        maxZoom: 18,
+        attribution: 'Tiles &copy; Esri',
+        crossOrigin: 'anonymous'
+      }),
+      'Esri Light Gray Canvas': L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}', {
+        maxZoom: 16,
+        attribution: 'Tiles &copy; Esri',
+        crossOrigin: 'anonymous'
+      })
+    };
 
-    L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
-      maxZoom: 18,
-      attribution: 'Tiles &copy; Esri'
-    }).addTo(map);
+    map = L.map('map', {
+      layers: [esriBasemaps['Esri World Imagery']]
+    }).setView(center, initial.zoom);
 
-    L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Reference/MapServer/tile/{z}/{y}/{x}', {
-      maxZoom: 18,
-      attribution: 'Labels &copy; Esri'
-    }).addTo(map);
+    const esriOverlays = {
+      'Esri Reference Labels': L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Reference/MapServer/tile/{z}/{y}/{x}', {
+        maxZoom: 18,
+        attribution: 'Labels &copy; Esri',
+        crossOrigin: 'anonymous'
+      })
+    };
+    esriOverlays['Esri Reference Labels'].addTo(map);
+
+    L.control.layers(esriBasemaps, esriOverlays, { position: 'topright' }).addTo(map);
 
     updateBboxRectangle(activeBbox);
 

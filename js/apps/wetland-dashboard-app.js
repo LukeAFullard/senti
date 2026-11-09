@@ -62,18 +62,47 @@
   // ============================================================================
 
   function initMap() {
+    const esriBasemaps = {
+      'Esri World Imagery': L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+        attribution: 'Tiles &copy; Esri',
+        maxZoom: 18,
+        crossOrigin: 'anonymous'
+      }),
+      'Esri Dark Gray Canvas': L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}', {
+        attribution: 'Tiles &copy; Esri',
+        maxZoom: 16,
+        crossOrigin: 'anonymous'
+      }),
+      'Esri World Topo Map': L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}', {
+        attribution: 'Tiles &copy; Esri',
+        maxZoom: 18,
+        crossOrigin: 'anonymous'
+      }),
+      'Esri Light Gray Canvas': L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}', {
+        attribution: 'Tiles &copy; Esri',
+        maxZoom: 16,
+        crossOrigin: 'anonymous'
+      })
+    };
+
     map = L.map('map', {
       center: [-37.31, 175.14],
       zoom: 12,
       minZoom: 3,
-      maxZoom: 18
+      maxZoom: 18,
+      layers: [esriBasemaps['Esri World Imagery']]
     });
 
-    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-      attribution: '&copy; OpenStreetMap contributors &copy; CARTO',
-      subdomains: 'abcd',
-      maxZoom: 19
-    }).addTo(map);
+    const esriOverlays = {
+      'Esri Reference Labels': L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Reference/MapServer/tile/{z}/{y}/{x}', {
+        attribution: 'Labels &copy; Esri',
+        maxZoom: 18,
+        crossOrigin: 'anonymous'
+      })
+    };
+    esriOverlays['Esri Reference Labels'].addTo(map);
+
+    L.control.layers(esriBasemaps, esriOverlays, { position: 'topright' }).addTo(map);
 
     opacitySlider.addEventListener('input', () => {
       if (wetlandImageOverlay) {

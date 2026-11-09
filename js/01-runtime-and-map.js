@@ -255,23 +255,33 @@
       url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
       options: { attribution: 'Tiles &copy; Esri', maxZoom: 19, crossOrigin: 'anonymous' }
     },
+    'Esri Dark Gray Canvas': {
+      url: 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}',
+      options: { attribution: 'Tiles &copy; Esri', maxZoom: 16, crossOrigin: 'anonymous' }
+    },
     'Esri Light Gray Canvas': {
       url: 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}',
       options: { attribution: 'Tiles &copy; Esri', maxZoom: 16, crossOrigin: 'anonymous' }
     },
-    'CartoDB Dark Matter': {
-      url: 'https://a.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png',
-      options: { attribution: '&copy; CARTO', maxZoom: 19, crossOrigin: 'anonymous' }
+    'Esri World Topo Map': {
+      url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}',
+      options: { attribution: 'Tiles &copy; Esri', maxZoom: 18, crossOrigin: 'anonymous' }
     },
-    'OpenStreetMap': {
-      url: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-      options: { attribution: '&copy; OpenStreetMap', maxZoom: 19, crossOrigin: 'anonymous' }
-    },
-    'OpenTopoMap': {
-      url: 'https://a.tile.opentopomap.org/{z}/{x}/{y}.png',
-      options: { attribution: '&copy; OpenTopoMap', maxZoom: 17, crossOrigin: 'anonymous' }
+    'Esri World Street Map': {
+      url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}',
+      options: { attribution: 'Tiles &copy; Esri', maxZoom: 18, crossOrigin: 'anonymous' }
     }
   };
+
+  // Compatibility aliases so any legacy or cached basemap names resolve to free Esri tiles without error
+  const legacyBasemapAliases = {
+    'CartoDB Dark Matter': 'Esri Dark Gray Canvas',
+    'OpenStreetMap': 'Esri World Street Map',
+    'OpenTopoMap': 'Esri World Topo Map'
+  };
+  if (typeof window !== 'undefined') {
+    window.legacyBasemapAliases = legacyBasemapAliases;
+  }
 
   let activeBasemapName = 'Esri World Imagery';
   const basemaps = {};

@@ -10,7 +10,10 @@
     const cacheKey = `${activeBasemapName}_${extent.minX.toFixed(1)}_${extent.minY.toFixed(1)}_${extent.maxX.toFixed(1)}_${extent.maxY.toFixed(1)}_${width}_${height}`;
     if (basemapCanvasCache.has(cacheKey)) return basemapCanvasCache.get(cacheKey);
 
-    const def = basemapDefs[activeBasemapName] || basemapDefs['Esri World Imagery'];
+    const resolvedBasemapName = (typeof legacyBasemapAliases !== 'undefined' && legacyBasemapAliases[activeBasemapName])
+      || (typeof window !== 'undefined' && window.legacyBasemapAliases && window.legacyBasemapAliases[activeBasemapName])
+      || activeBasemapName;
+    const def = basemapDefs[resolvedBasemapName] || basemapDefs['Esri World Imagery'];
     const maxZ = def.options.maxZoom || 18;
     const worldSize = 20037508.342789244 * 2;
     const targetRes = (extent.maxX - extent.minX) / width;

@@ -120,6 +120,7 @@
     if (!drawnBbox) return;
     resetResults();
     const startGeneration = pipelineGeneration;
+    s2PipelineMachine?.send('START_SEARCH');
 
     const modes = getActiveModes();
     const start = startDateInput.value || '2023-12-01';
@@ -151,7 +152,10 @@
       const allFeatures = [];
 
       for (let i = 0; i < chunks.length; i++) {
-        if (startGeneration !== pipelineGeneration) return;
+        if (startGeneration !== pipelineGeneration) {
+          s2PipelineMachine?.send('CANCEL');
+          return;
+        }
         if (chunks.length > 1) {
           log(`Querying time window ${i + 1}/${chunks.length} (${chunks[i].substring(0, 10)} to ${chunks[i].substring(21, 31)})...`);
         }
@@ -171,7 +175,10 @@
           const chunkItems = await fetchStacChunk(requestBody, (page, total, pageItems) => {
             if (page === 1 || page % 5 === 0) log(`Window ${i + 1}: STAC page ${page}; ${total} unique item(s) retrieved so far.`);
           });
-          if (startGeneration !== pipelineGeneration) return;
+          if (startGeneration !== pipelineGeneration) {
+            s2PipelineMachine?.send('CANCEL');
+            return;
+          }
           allFeatures.push(...chunkItems);
           log(`Retrieved ${chunkItems.length} unique STAC item(s) for window ${i + 1} across all pages.`);
         } catch (err) {
@@ -200,6 +207,8 @@
       log(`Found ${candidates.length} matching acquisition(s) from ${totalTiles} tile item(s); ${multiTileCount} acquisition(s) require mosaicking. ${allAcquisitions.length - candidates.length} acquisition(s) excluded by the cloud-cover threshold.`);
       if (candidates.length === 0) throw new Error('No acquisitions matched the cloud-cover threshold and selected bands.');
 
+      s2PipelineMachine?.send('STAC_SUCCESS', { count: candidates.length });
+
       if (Number.isFinite(limit) && candidates.length > limit) {
         const sampled = [];
         if (limit === 1) {
@@ -221,6 +230,8 @@
         log(`Loaded all ${validScenes.length} matching acquisition(s)${allScenesChk.checked ? ' (unlimited mode)' : ''}.`);
       }
 
+      s2PipelineMachine?.send('DATA_LOADED', { validCount: validScenes.length });
+
       const t1Search = performance.now();
       log(`[Timing] STAC search and grouping completed in ${((t1Search - t0Search) / 1000).toFixed(2)}s`);
 
@@ -236,8 +247,10 @@
       const t2Render = performance.now();
       await displayStepByIndex(displaySteps.length - 1);
       const t3Render = performance.now();
+      s2PipelineMachine?.send('RENDER_SUCCESS');
       log(`[Timing] Initial scene rendering completed in ${((t3Render - t2Render) / 1000).toFixed(2)}s`);
     } catch (error) {
+      s2PipelineMachine?.send('ERROR', { error: error.message });
       if (error.message !== 'Pipeline cancelled') log('ERROR: ' + error.message);
     } finally {
       runBtn.disabled = !drawnBbox;
@@ -245,7 +258,10 @@
     }
   }
 
-  sceneSlider.addEventListener('input', () => displayStepByIndex(Number(sceneSlider.value)));
+  sceneSlider.addEventListener('input', () => {
+    s2PipelineMachine?.send('SELECT_SCENE', { sceneIndex: Number(sceneSlider.value) });
+    displayStepByIndex(Number(sceneSlider.value));
+  });
   [outputMode, modePanel2, modePanel3, modePanel4, maskCloudsChk, includeBasemapChk, waterOnlyChk, waterMaskThresholdInput].forEach(el => {
     el.addEventListener('change', () => {
       if (el === waterMaskThresholdInput) {
@@ -253,7 +269,10 @@
         waterMaskThresholdInput.value = String(Number.isFinite(value) ? Math.max(-0.5, Math.min(0.5, value)) : 0);
       }
       compositeCache.clear();
-      if (el === outputMode && displaySteps.length > 0) rebuildDisplaySteps();
+      if (el === outputMode) {
+        s2PipelineMachine?.send('CHANGE_MODE', { mode: outputMode.value });
+        if (displaySteps.length > 0) rebuildDisplaySteps();
+      }
       updateCsvButtonState();
       updateOptramPersistenceUI();
       if (displaySteps.length > 0) displayStepByIndex(Number(sceneSlider.value));

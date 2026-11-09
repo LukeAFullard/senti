@@ -12,6 +12,10 @@
       "responsibility": "DOM-free STAC search pagination, UTM CRS detection, and GeoTIFF window reader"
     },
     {
+      "path": "js/core/00-state-machine.js",
+      "responsibility": "Universal, zero-DOM Finite State Machine engine, state schemas, pub/sub bus, and agent introspection API"
+    },
+    {
       "path": "js/01-runtime-and-map.js",
       "responsibility": "Runtime, DOM references, shared state, map setup and interaction"
     },

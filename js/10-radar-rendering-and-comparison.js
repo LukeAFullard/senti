@@ -4,12 +4,24 @@
 
 'use strict';
 
+  // ============================================================================
+  // Sentinel-1 Radar Workflow State Machine (FSM)
+  // ============================================================================
+  const radarWorkflowMachine = (typeof SentiStateMachine !== 'undefined' && SentiStateMachine.createMachine)
+    ? SentiStateMachine.createMachine(SentiStateMachine.schemas.RADAR_WORKFLOW)
+    : null;
+
+  if (typeof window !== 'undefined') {
+    window.radarWorkflowMachine = radarWorkflowMachine;
+  }
+
   const RADAR_SAS_SIGN_URL = 'https://planetarycomputer.microsoft.com/api/sas/v1/sign';
 
   function clearRadarOverlay() {
     if (radarOverlay && map.hasLayer(radarOverlay)) map.removeLayer(radarOverlay);
     radarOverlay = null;
     radarClearBtn.disabled = true;
+    radarWorkflowMachine?.send('CLEAR');
   }
 
   function clearSeasonalAnomalyOverlay() {
@@ -26,6 +38,7 @@
     radarCompareOverlay = null;
     radarCompareClearBtn.disabled = true;
     radarCompareLegend.style.display = 'none';
+    radarWorkflowMachine?.send('CLEAR_COMPARE');
   }
 
   async function signPlanetaryComputerAsset(href) {
@@ -48,6 +61,7 @@
     const start = startDateInput.value || '2023-12-01';
     const end = endDateInput.value || '2024-03-01';
     if (new Date(end) < new Date(start)) { radarStatus.textContent = 'End date must be on or after start date.'; return; }
+    radarWorkflowMachine?.send('START_SEARCH');
     radarSearchBtn.disabled = true;
     radarSearchBtn.textContent = 'Searching…';
     radarStatus.textContent = 'Searching the public Sentinel-1 RTC STAC catalogue...';
@@ -71,6 +85,7 @@
         radarSceneSelect.innerHTML = '<option value="">No matching RTC scenes</option>';
         radarBaselineSelect.innerHTML = '<option value="">No matching RTC scenes</option>';
         radarSceneSelect.disabled = true; radarBaselineSelect.disabled = true; radarRenderBtn.disabled = true; radarCompareBtn.disabled = true;
+        radarWorkflowMachine?.send('SEARCH_EMPTY');
         radarStatus.textContent = 'No Sentinel-1 RTC scenes with supported polarization assets matched this AOI/date range. Try a longer date range.';
         return;
       }
@@ -93,9 +108,11 @@
       radarBaselineSelect.disabled = radarScenes.length < 2;
       radarRenderBtn.disabled = false;
       radarCompareBtn.disabled = !(radarScenes.length > 1 && diffModeChk.checked && activeRenderedState?.isDiff);
+      radarWorkflowMachine?.send('SEARCH_SUCCESS', { count: radarScenes.length });
       radarStatus.textContent = `${radarScenes.length} Sentinel-1 RTC item(s) found. Select current and baseline dates for a radar layer or optical–radar change comparison. Showing up to 100 results from the public catalogue.`;
       log(`Sentinel-1 RTC search returned ${radarScenes.length} scene(s) for ${start} to ${end}.`);
     } catch (err) {
+      radarWorkflowMachine?.send('ERROR', { error: err.message });
       radarStatus.textContent = `Radar search failed: ${err.message}. Check your internet connection and retry.`;
       log('Sentinel-1 search error: ' + err.message);
     } finally { radarSearchBtn.disabled = false; radarSearchBtn.textContent = 'Search Sentinel-1 RTC'; }
@@ -283,6 +300,7 @@
   radarRenderBtn.addEventListener('click', async () => {
     const item = radarScenes.find(sc => sc.id === radarSceneSelect.value);
     if (!item) { radarStatus.textContent = 'Search for Sentinel-1 RTC scenes first.'; return; }
+    radarWorkflowMachine?.send('SELECT_SCENE', { sceneId: item.id });
     radarRenderBtn.disabled = true;
     const original = radarRenderBtn.textContent;
     radarRenderBtn.textContent = 'Loading radar…';
@@ -306,8 +324,10 @@
       radarClearBtn.disabled = false;
       const label = mode === 'vv_db' ? `${raw.coKey.toUpperCase()} backscatter (dB)` : mode === 'vh_db' ? `${raw.crossKey.toUpperCase()} backscatter (dB)` : `${raw.coKey.toUpperCase()} − ${raw.crossKey.toUpperCase()} (dB)`;
       radarStatus.innerHTML = `<strong>${escapeHtml(raw.dateStr)} | ${escapeHtml(label)}</strong><br>Item: ${escapeHtml(raw.id)}<br>Orbit: ${escapeHtml(raw.properties['sat:orbit_state'] || 'not supplied')} | Instrument mode: ${escapeHtml(raw.properties['sar:instrument_mode'] || 'not supplied')} | Approx. grid: ${raw.width} × ${raw.height}.<br><span class="small-note">Asset scale applied: ${raw.scaleUsed}. The renderer converts positive RTC backscatter to dB; verify source asset scale metadata if using values quantitatively. The visual is clipped to the AOI and displayed above Sentinel-2.</span>`;
+      radarWorkflowMachine?.send('RENDER_SUCCESS');
       log(`Sentinel-1 RTC layer displayed: ${raw.dateStr} ${label}.`);
     } catch (err) {
+      radarWorkflowMachine?.send('ERROR', { error: err.message });
       radarStatus.textContent = `Could not render radar layer: ${err.message}`;
       log('Sentinel-1 render error: ' + err.message);
     } finally { radarRenderBtn.textContent = original; radarRenderBtn.disabled = !radarScenes.length; }
@@ -355,6 +375,7 @@
     const radarThreshold = Math.max(0, Number(radarDeltaThresholdInput.value) || 1.5);
     opticalDeltaThresholdInput.value = String(opticalThreshold);
     radarDeltaThresholdInput.value = String(radarThreshold);
+    radarWorkflowMachine?.send('START_COMPARE');
     radarCompareBtn.disabled = true;
     radarCompareBtn.textContent = 'Comparing…';
     clearRadarCompareOverlay();

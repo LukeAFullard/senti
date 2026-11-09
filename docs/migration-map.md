@@ -5,6 +5,7 @@ This map records the current extraction boundaries and the intended next destina
 | Existing responsibility / symbols | Current file | Next reusable boundary |
 |---|---|---|
 | GIF89a encoder (`encodeAnimatedGIF`, `lzwEncode`) | `js/01-runtime-and-map.js` | `export/gif.js`; pure encoder accepts canvases and delay, returns `Blob` |
+| Universal Finite State Machine, lifecycle events, transition history, and agent snapshot APIs (`SentiStateMachine`) | `js/core/00-state-machine.js` | `core/state-machine.js`; pure deterministic FSM engine and pub/sub bus |
 | DOM references, input listeners, shared state, map setup, Leaflet Draw and point-selection interaction | `js/01-runtime-and-map.js` | `ui/app-shell.js`, `core/state.js`, `core/map.js`, `features/point-probes.js`; pass dependencies through an app context |
 | CPU worker creation, CPU task execution, bounded concurrency | `js/01-runtime-and-map.js` | `core/workers.js`; make worker implementation injectable and expose lifecycle/cleanup |
 | Scene metadata helpers, CRS parsing, bounds transforms, pixel-window calculations | `js/02-raster-and-index-analysis.js` | `core/projection.js`, `data/scene-metadata.js` |
@@ -34,8 +35,8 @@ This map records the current extraction boundaries and the intended next destina
 ## What was actually verified in this pass
 
 - All JavaScript files pass `node --check`.
-- The pure core libraries `js/core/00-toolkit-core.js` and `js/core/00-stac-and-cog-reader.js` pass automated unit tests in `tests/test_toolkit_core.js` (7/7 tests passed) and `tests/test_stac_and_cog_reader.js` (7/7 tests passed).
-- The air quality module `js/11-air-quality-module.js` passes all 12 automated test suites in `tests/test_air_quality.js` including pixel metrics, grid calculation with masking, Sen2Cor DDV fallback diagnostics, trace gas unit conversion, color ramps, host app registration, Web Worker interception, live/mock STAC query formation, NetCDF swath gridding, and Sentinel-2 / Sentinel-5P time series loading and deduplication.
+- The pure core libraries `js/core/00-toolkit-core.js`, `js/core/00-stac-and-cog-reader.js`, and `js/core/00-state-machine.js` pass automated unit tests in `tests/test_toolkit_core.js` (7/7 tests passed), `tests/test_stac_and_cog_reader.js` (7/7 tests passed), and `tests/test_state_machine.js` (10/10 tests passed).
+- The air quality module `js/11-air-quality-module.js` passes all 15 automated test suites in `tests/test_air_quality.js` including pixel metrics, grid calculation with masking, Sen2Cor DDV fallback diagnostics, trace gas unit conversion, color ramps, host app registration, Web Worker interception, live/mock STAC query formation, NetCDF swath gridding, Sentinel-2 / Sentinel-5P time series loading, multi-sensor grid correlation, and OpenAQ ground monitor fetching.
 - Simulated sequential script execution in classic order verified no unhandled globals or collisions.
 - HTML entries (`index.html`, `air-quality-dashboard.html`, `test-app.html`) load modules in correct dependency order.
 

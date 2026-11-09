@@ -337,12 +337,17 @@
       if (startGeneration === pipelineGeneration) {
         gifBtn.textContent = 'Encoding GIF…';
         const blob = encodeAnimatedGIF(canvases, 80);
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `sentinel2_${gridLayout.value}_${temporalMode.value}_${startDateInput.value}_to_${endDateInput.value}.gif`;
-        a.click();
-        setTimeout(() => URL.revokeObjectURL(url), 5000);
+        const filename = `sentinel2_${gridLayout.value}_${temporalMode.value}_${startDateInput.value}_to_${endDateInput.value}.gif`;
+        if (typeof SentiExportServices !== 'undefined' && SentiExportServices.triggerBlobDownload) {
+          SentiExportServices.triggerBlobDownload(blob, filename, 'image/gif');
+        } else {
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = filename;
+          a.click();
+          setTimeout(() => URL.revokeObjectURL(url), 5000);
+        }
         log('GIF downloaded successfully.');
       }
     } catch (err) {

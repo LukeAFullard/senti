@@ -212,26 +212,35 @@
     }
     exportAnomalyBtn.disabled = true;
     try {
-      const raw = result.raw, w = raw.refWindow;
-      const scaleX = Math.abs(raw.refRes[0] * (w[2]-w[0]) / raw.width);
-      const scaleY = Math.abs(raw.refRes[1] * (w[3]-w[1]) / raw.height);
-      const tieX = raw.refOrigin[0] + w[0] * raw.refRes[0];
-      const tieY = raw.refOrigin[1] + w[1] * raw.refRes[1];
-      const match = String(raw.refCrs || '').match(/EPSG\s*:\s*(\d+)/i);
-      if (!match) throw new Error('Could not identify an EPSG code for this grid.');
-      const epsg = Number(match[1]);
-      const exportGridClean = new Float32Array(raw.indexGrid.length);
-      for (let i = 0; i < raw.indexGrid.length; i++) {
-        exportGridClean[i] = Number.isNaN(raw.indexGrid[i]) ? -9999 : raw.indexGrid[i];
+      const result = seasonalAnomalyResult;
+      const raw = result.raw;
+      const description = `Sentinel-2 seasonal robust anomaly; index=${result.targetMode}; date=${result.targetDate}; baseline-scenes=${result.referenceCount}; window-days=±${result.windowDays}; min-obs=${result.minObs}; units=robust score 1.4826*MAD; display-capped ±${result.maxZ}; no independent ground validation; ${new Date().toISOString()}`;
+      const filename = `sentinel2_seasonal_anomaly_${result.targetMode}_${result.targetDate}.tif`;
+      
+      if (typeof SentiExportServices !== 'undefined' && SentiExportServices.exportGeoTiff) {
+        await SentiExportServices.exportGeoTiff(raw, raw.indexGrid, filename, { description });
+      } else {
+        const w = raw.refWindow;
+        const scaleX = Math.abs(raw.refRes[0] * (w[2]-w[0]) / raw.width);
+        const scaleY = Math.abs(raw.refRes[1] * (w[3]-w[1]) / raw.height);
+        const tieX = raw.refOrigin[0] + w[0] * raw.refRes[0];
+        const tieY = raw.refOrigin[1] + w[1] * raw.refRes[1];
+        const match = String(raw.refCrs || '').match(/EPSG\s*:\s*(\d+)/i);
+        if (!match) throw new Error('Could not identify an EPSG code for this grid.');
+        const epsg = Number(match[1]);
+        const exportGridClean = new Float32Array(raw.indexGrid.length);
+        for (let i = 0; i < raw.indexGrid.length; i++) {
+          exportGridClean[i] = Number.isNaN(raw.indexGrid[i]) ? -9999 : raw.indexGrid[i];
+        }
+        const buffer = await GeoTIFF.writeArrayBuffer(exportGridClean, {
+          width: raw.width, height: raw.height, ModelPixelScale: [scaleX, scaleY, 0], ModelTiepoint: [0,0,0,tieX,tieY,0],
+          GTModelTypeGeoKey: epsg === 4326 ? 2 : 1,
+          ...(epsg === 4326 ? { GeographicTypeGeoKey: 4326 } : { ProjectedCSTypeGeoKey: epsg }),
+          GDAL_NODATA: '-9999',
+          ImageDescription: description
+        });
+        triggerDownload(new Blob([buffer], {type:'image/tiff'}), filename);
       }
-      const buffer = await GeoTIFF.writeArrayBuffer(exportGridClean, {
-        width: raw.width, height: raw.height, ModelPixelScale: [scaleX, scaleY, 0], ModelTiepoint: [0,0,0,tieX,tieY,0],
-        GTModelTypeGeoKey: epsg === 4326 ? 2 : 1,
-        ...(epsg === 4326 ? { GeographicTypeGeoKey: 4326 } : { ProjectedCSTypeGeoKey: epsg }),
-        GDAL_NODATA: '-9999',
-        ImageDescription: `Sentinel-2 seasonal robust anomaly; index=${result.targetMode}; date=${result.targetDate}; baseline-scenes=${result.referenceCount}; window-days=±${result.windowDays}; min-obs=${result.minObs}; units=robust score 1.4826*MAD; display-capped ±${result.maxZ}; no independent ground validation; ${new Date().toISOString()}`
-      });
-      triggerDownload(new Blob([buffer], {type:'image/tiff'}), `sentinel2_seasonal_anomaly_${result.targetMode}_${result.targetDate}.tif`);
       log('Exported seasonal anomaly GeoTIFF with projection metadata.');
     } catch (err) {
       seasonalAnomalyStatus.textContent = 'Anomaly export failed: ' + err.message;

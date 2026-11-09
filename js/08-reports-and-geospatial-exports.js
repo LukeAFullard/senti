@@ -4,18 +4,20 @@
 
 'use strict';
 
-  // Reproducibility, geospatial exports and diagnostics (no ground data needed)
+  // Reproducibility, geospatial exports and diagnostics (delegating to SentiExportServices)
   // --------------------------------------------------------------------------
-  function escapeHtml(value) {
-    return String(value ?? '').replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
-  }
+  const escapeHtml = (typeof SentiExportServices !== 'undefined' && SentiExportServices.escapeHtml)
+    ? SentiExportServices.escapeHtml
+    : (val => String(val ?? '').replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch])));
 
-  function triggerDownload(blob, filename) {
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url; a.download = filename; document.body.appendChild(a); a.click(); a.remove();
-    setTimeout(() => URL.revokeObjectURL(url), 6000);
-  }
+  const triggerDownload = (typeof SentiExportServices !== 'undefined' && SentiExportServices.triggerBlobDownload)
+    ? ((blob, filename) => SentiExportServices.triggerBlobDownload(blob, filename))
+    : function (blob, filename) {
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url; a.download = filename; document.body.appendChild(a); a.click(); a.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 6000);
+      };
 
   geoJsonBtn.addEventListener('click', () => {
     const features = [];
@@ -30,9 +32,13 @@
       features.push(feature);
     });
     if (!features.length) { log('Draw an AOI rectangle or a point/line/polygon before exporting GeoJSON.'); return; }
-    // RFC 7946 GeoJSON coordinates are WGS84 longitude/latitude; omit the deprecated `crs` member.
-    const collection = { type: 'FeatureCollection', name: 'Sentinel-2 analysis geometry', features };
-    triggerDownload(new Blob([JSON.stringify(collection, null, 2)], { type: 'application/geo+json;charset=utf-8' }), 'sentinel_analysis_geometries.geojson');
+    
+    if (typeof SentiExportServices !== 'undefined' && SentiExportServices.exportGeoJson) {
+      SentiExportServices.exportGeoJson(features, 'sentinel_analysis_geometries.geojson', { name: 'Sentinel-2 analysis geometry' });
+    } else {
+      const collection = { type: 'FeatureCollection', name: 'Sentinel-2 analysis geometry', features };
+      triggerDownload(new Blob([JSON.stringify(collection, null, 2)], { type: 'application/geo+json;charset=utf-8' }), 'sentinel_analysis_geometries.geojson');
+    }
     log(`Exported ${features.length} AOI / drawing feature(s) as GeoJSON (WGS84 longitude/latitude).`);
   });
 
@@ -50,32 +56,42 @@
     const original = geoTiffBtn.textContent;
     geoTiffBtn.textContent = 'Writing GeoTIFF…';
     try {
-      const w = raw.refWindow;
-      const sw = w[2] - w[0], sh = w[3] - w[1];
-      const scaleX = Math.abs(raw.refRes[0] * sw / raw.width);
-      const scaleY = Math.abs(raw.refRes[1] * sh / raw.height);
-      const tieX = raw.refOrigin[0] + w[0] * raw.refRes[0];
-      const tieY = raw.refOrigin[1] + w[1] * raw.refRes[1];
-      const epsgMatch = String(raw.refCrs || '').match(/EPSG\s*:\s*(\d+)/i);
-      if (!epsgMatch) throw new Error('Could not identify an EPSG code for this grid; GeoTIFF export cancelled to avoid an unreferenced raster.');
-      const epsg = Number(epsgMatch[1]);
-      const exportGridClean = new Float32Array(exportGrid.length);
-      for (let i = 0; i < exportGrid.length; i++) {
-        exportGridClean[i] = Number.isNaN(exportGrid[i]) ? -9999 : exportGrid[i];
-      }
-
-      const metadata = {
-        width: raw.width, height: raw.height,
-        ModelPixelScale: [scaleX, scaleY, 0],
-        ModelTiepoint: [0, 0, 0, tieX, tieY, 0],
-        GTModelTypeGeoKey: epsg === 4326 ? 2 : 1,
-        ...(epsg === 4326 ? { GeographicTypeGeoKey: 4326 } : { ProjectedCSTypeGeoKey: epsg }),
-        GDAL_NODATA: '-9999',
-        ImageDescription: `${state.isDiff ? 'Change layer' : 'Sentinel-2 analysis'}; mode=${raw.mode || outputMode.value}; date=${raw.dateStr || ''}; ${new Date().toISOString()}`
-      };
-      const buffer = await GeoTIFF.writeArrayBuffer(exportGridClean, metadata);
       const label = state.isDiff ? 'change' : (raw.mode || outputMode.value);
-      triggerDownload(new Blob([buffer], { type: 'image/tiff' }), `sentinel_${label}_${String(raw.dateStr || 'analysis').replace(/[^a-z0-9_-]/gi, '_')}.tif`);
+      const filename = `sentinel_${label}_${String(raw.dateStr || 'analysis').replace(/[^a-z0-9_-]/gi, '_')}.tif`;
+      const description = `${state.isDiff ? 'Change layer' : 'Sentinel-2 analysis'}; mode=${raw.mode || outputMode.value}; date=${raw.dateStr || ''}; ${new Date().toISOString()}`;
+      
+      if (typeof SentiExportServices !== 'undefined' && SentiExportServices.exportGeoTiff) {
+        await SentiExportServices.exportGeoTiff(raw, exportGrid, filename, { description });
+      } else {
+        const w = raw.refWindow;
+        const sw = w[2] - w[0], sh = w[3] - w[1];
+        const scaleX = Math.abs(raw.refRes[0] * sw / raw.width);
+        const scaleY = Math.abs(raw.refRes[1] * sh / raw.height);
+        const tieX = raw.refOrigin[0] + w[0] * raw.refRes[0];
+        const tieY = raw.refOrigin[1] + w[1] * raw.refRes[1];
+        const epsgMatch = String(raw.refCrs || '').match(/EPSG\s*:\s*(\d+)/i);
+        if (!epsgMatch) throw new Error('Could not identify an EPSG code for this grid; GeoTIFF export cancelled to avoid an unreferenced raster.');
+        const epsg = Number(epsgMatch[1]);
+        const exportGridClean = new Float32Array(exportGrid.length);
+        for (let i = 0; i < exportGrid.length; i++) {
+          exportGridClean[i] = Number.isNaN(exportGrid[i]) ? -9999 : exportGrid[i];
+        }
+
+        const metadata = {
+          width: raw.width, height: raw.height,
+          ModelPixelScale: [scaleX, scaleY, 0],
+          ModelTiepoint: [0, 0, 0, tieX, tieY, 0],
+          GTModelTypeGeoKey: epsg === 4326 ? 2 : 1,
+          ...(epsg === 4326 ? { GeographicTypeGeoKey: 4326 } : { ProjectedCSTypeGeoKey: epsg }),
+          GDAL_NODATA: '-9999',
+          ImageDescription: description
+        };
+        const buffer = await GeoTIFF.writeArrayBuffer(exportGridClean, metadata);
+        triggerDownload(new Blob([buffer], { type: 'image/tiff' }), filename);
+      }
+      const epsg = (typeof SentiExportServices !== 'undefined' && SentiExportServices.parseEpsgCode)
+        ? SentiExportServices.parseEpsgCode(raw.refCrs)
+        : raw.refCrs;
       log(`Exported georeferenced ${raw.width}×${raw.height} Float32 GeoTIFF (EPSG:${epsg}). Values are analysis-grid values, not native-resolution pixels.`);
     } catch (err) {
       log('GeoTIFF export failed: ' + err.message);
@@ -126,10 +142,26 @@
       ['OPTRAM calibration', optramCalibration ? `${optramCalibration.scenesUsed} scenes; ${optramCalibration.sampleCount} valid sample visits; global dry STR p10=${optramCalibration.globalDry}; global wet STR p90=${optramCalibration.globalWet}` : 'Not fitted in current app session'],
       ['Independent validation', 'No ground measurements were supplied; results are remote-sensing proxies/internal diagnostics, not independently validated estimates.']
     ];
-    const sceneRows = validScenes.map(sc => `<tr><td>${escapeHtml(getSceneDateStr(sc))}</td><td>${escapeHtml(sc.id)}</td><td>${Number.isFinite(getCloudCover(sc)) ? getCloudCover(sc).toFixed(1) + '%' : 'N/A'}</td><td>${escapeHtml(sc.properties?.['s2:product_uri'] || '')}</td></tr>`).join('');
-    const settingRows = settings.map(([k,v]) => `<tr><th>${escapeHtml(k)}</th><td>${escapeHtml(v)}</td></tr>`).join('');
-    const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Sentinel analysis reproducibility report</title><style>body{font:15px/1.5 system-ui,sans-serif;max-width:1100px;margin:2rem auto;padding:0 1rem;color:#222}h1,h2{line-height:1.2}table{border-collapse:collapse;width:100%;margin:1rem 0;font-size:13px}th,td{border:1px solid #bbb;padding:6px;text-align:left;overflow-wrap:anywhere}th{background:#eee}p{max-width:850px}.warning{border-left:4px solid #b8860b;padding:8px 12px;background:#fff8e5}</style></head><body><h1>Sentinel analysis reproducibility report</h1><p>Generated ${escapeHtml(new Date().toISOString())} by the browser-based Sentinel-2 Wetness Explorer.</p><p class="warning"><strong>Interpretation note:</strong> no ground data are available for independent validation. Index and radar products are screening evidence; OPTRAM is relative wetness, not volumetric soil moisture. Water-quality indices are spectral proxies, not concentration estimates.</p><h2>Analysis settings</h2><table>${settingRows}</table><h2>Selected Sentinel-2 acquisitions</h2><p>Scene cloud cover is catalogue metadata; it is not a substitute for AOI-level valid-pixel coverage. The valid-observation count mode estimates pixel support on the app's analysis grid after applying the SCL mask.</p><table><thead><tr><th>Date</th><th>STAC item ID</th><th>Scene cloud cover</th><th>Product URI (if supplied)</th></tr></thead><tbody>${sceneRows}</tbody></table><h2>Methods and limitations</h2><p>The app uses cloud-optimised raster assets from Earth Search and calculates spectral indices client-side. Spatial summaries operate on the app's capped analysis grid and may be coarser than the native source bands. Calibration diagnostics describe the fitted AOI/date-range data only; they do not constitute ground validation.</p><p>Save this report alongside exported GeoTIFF, GeoJSON and CSV outputs to preserve the settings used for analysis.</p></body></html>`;
-    triggerDownload(new Blob([html], { type: 'text/html;charset=utf-8' }), `sentinel_reproducibility_${new Date().toISOString().slice(0,10)}.html`);
+    
+    const filename = `sentinel_reproducibility_${new Date().toISOString().slice(0,10)}.html`;
+    if (typeof SentiExportServices !== 'undefined' && SentiExportServices.exportReproducibilityReport) {
+      SentiExportServices.exportReproducibilityReport({
+        title: 'Sentinel analysis reproducibility report',
+        appName: 'browser-based Sentinel-2 Wetness Explorer',
+        settings,
+        scenes: validScenes.map(sc => ({
+          id: sc.id,
+          dateStr: getSceneDateStr(sc),
+          sceneCloudPct: getCloudCover(sc),
+          properties: sc.properties
+        }))
+      }, filename);
+    } else {
+      const sceneRows = validScenes.map(sc => `<tr><td>${escapeHtml(getSceneDateStr(sc))}</td><td>${escapeHtml(sc.id)}</td><td>${Number.isFinite(getCloudCover(sc)) ? getCloudCover(sc).toFixed(1) + '%' : 'N/A'}</td><td>${escapeHtml(sc.properties?.['s2:product_uri'] || '')}</td></tr>`).join('');
+      const settingRows = settings.map(([k,v]) => `<tr><th>${escapeHtml(k)}</th><td>${escapeHtml(v)}</td></tr>`).join('');
+      const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Sentinel analysis reproducibility report</title><style>body{font:15px/1.5 system-ui,sans-serif;max-width:1100px;margin:2rem auto;padding:0 1rem;color:#222}h1,h2{line-height:1.2}table{border-collapse:collapse;width:100%;margin:1rem 0;font-size:13px}th,td{border:1px solid #bbb;padding:6px;text-align:left;overflow-wrap:anywhere}th{background:#eee}p{max-width:850px}.warning{border-left:4px solid #b8860b;padding:8px 12px;background:#fff8e5}</style></head><body><h1>Sentinel analysis reproducibility report</h1><p>Generated ${escapeHtml(new Date().toISOString())} by the browser-based Sentinel-2 Wetness Explorer.</p><p class="warning"><strong>Interpretation note:</strong> no ground data are available for independent validation. Index and radar products are screening evidence; OPTRAM is relative wetness, not volumetric soil moisture. Water-quality indices are spectral proxies, not concentration estimates.</p><h2>Analysis settings</h2><table>${settingRows}</table><h2>Selected Sentinel-2 acquisitions</h2><p>Scene cloud cover is catalogue metadata; it is not a substitute for AOI-level valid-pixel coverage. The valid-observation count mode estimates pixel support on the app's analysis grid after applying the SCL mask.</p><table><thead><tr><th>Date</th><th>STAC item ID</th><th>Scene cloud cover</th><th>Product URI (if supplied)</th></tr></thead><tbody>${sceneRows}</tbody></table><h2>Methods and limitations</h2><p>The app uses cloud-optimised raster assets from Earth Search and calculates spectral indices client-side. Spatial summaries operate on the app's capped analysis grid and may be coarser than the native source bands. Calibration diagnostics describe the fitted AOI/date-range data only; they do not constitute ground validation.</p><p>Save this report alongside exported GeoTIFF, GeoJSON and CSV outputs to preserve the settings used for analysis.</p></body></html>`;
+      triggerDownload(new Blob([html], { type: 'text/html;charset=utf-8' }), filename);
+    }
     log('Downloaded reproducibility report with settings, scene IDs, AOI metadata and limitations.');
   });
 

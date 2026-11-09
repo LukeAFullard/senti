@@ -21,12 +21,15 @@ assert(typeof AQ.normalizeSen2CorAtmosphericGrid === 'function', 'normalizeSen2C
 assert(AQ.S5P_PRODUCTS && typeof AQ.S5P_PRODUCTS === 'object', 'S5P_PRODUCTS catalog must be exported');
 assert(typeof AQ.ensureH5Wasm === 'function', 'ensureH5Wasm must be a function');
 assert(typeof AQ.gridS5pNetCdfBuffer === 'function', 'gridS5pNetCdfBuffer must be a function');
+assert(typeof AQ.gridS5pNetCdfBufferInWorker === 'function', 'gridS5pNetCdfBufferInWorker must be a function');
 assert(typeof AQ.searchS5pStac === 'function', 'searchS5pStac must be a function');
 assert(typeof AQ.signAndFetchS5pBuffer === 'function', 'signAndFetchS5pBuffer must be a function');
 assert(typeof AQ.loadSentinel2AqSeries === 'function', 'loadSentinel2AqSeries must be a function');
 assert(typeof AQ.loadSentinel5pSeries === 'function', 'loadSentinel5pSeries must be a function');
+assert(typeof AQ.correlateGrids === 'function', 'correlateGrids must be a function');
+assert(typeof AQ.fetchOpenAqStations === 'function', 'fetchOpenAqStations must be a function');
 
-const expectedMetrics = ['s2_aot', 's2_wvp', 'asi', 'ngai', 'spdi', 'cdi', 'pm25_proxy'];
+const expectedMetrics = ['s2_aot', 's2_wvp', 'asi', 'ngai', 'spdi', 'cdi', 'pm25_proxy', 'aerosol_type'];
 for (const m of expectedMetrics) {
   assert(AQ.AQ_METRICS[m], `Metric ${m} must be defined in AQ_METRICS`);
   assert(Array.isArray(AQ.AQ_METRICS[m].bands), `Metric ${m} must specify bands array`);
@@ -81,6 +84,12 @@ assert(Math.abs(cdiVal - 0.25) < 1e-5, `CDI calculation mismatch: ${cdiVal}`);
 // pm25 = (0.3 * 85) / (1.0 * 1.36) = 25.5 / 1.36 = 18.75
 const pm25Val = AQ.calculateAqPixel('pm25_proxy', [0.3, 2.0]);
 assert(Math.abs(pm25Val - 18.75) < 1e-3, `PM2.5 calculation mismatch: ${pm25Val}`);
+
+// Test Aerosol Type classification (Smoke vs Dust vs Clear)
+assert.strictEqual(AQ.calculateAqPixel('aerosol_type', [0.10, 0.10, 0.10]), 0, 'Clean should classify as 0');
+assert.strictEqual(AQ.calculateAqPixel('aerosol_type', [0.30, 0.15, 0.10]), 1, 'Smoke should classify as 1');
+assert.strictEqual(AQ.calculateAqPixel('aerosol_type', [0.15, 0.14, 0.30]), 2, 'Mineral Dust should classify as 2');
+assert.strictEqual(AQ.calculateAqPixel('aerosol_type', [0.30, 0.15, 0.40]), 3, 'Mixed Plume should classify as 3');
 
 // Test invalid inputs
 assert(Number.isNaN(AQ.calculateAqPixel('s2_aot', [NaN])), 'NaN input should return NaN');
@@ -479,6 +488,75 @@ async function testWorkerAndLegend() {
   assert(s5pFrames[0].grid instanceof Float32Array);
   assert(s5pFrames[0].indexGrid instanceof Float32Array);
   console.log('✓ Sentinel-5P series subsampling and chronological ordering verified.');
+
+  console.log('--- 13. Testing Multi-Sensor Grid Correlation (correlateGrids) ---');
+  // Perfectly correlated grids: Y = 2 * X + 1
+  const gA = new Float32Array([1, 2, 3, 4, 5]);
+  const gB = new Float32Array([3, 5, 7, 9, 11]);
+  const corrPerf = AQ.correlateGrids(gA, gB);
+  assert.strictEqual(corrPerf.count, 5);
+  assert(Math.abs(corrPerf.pearsonR - 1.0) < 1e-4, `Expected r=1.0, got ${corrPerf.pearsonR}`);
+  assert(Math.abs(corrPerf.rSquared - 1.0) < 1e-4, `Expected R^2=1.0, got ${corrPerf.rSquared}`);
+  assert(Math.abs(corrPerf.slope - 2.0) < 1e-4, `Expected slope=2.0, got ${corrPerf.slope}`);
+  assert(Math.abs(corrPerf.intercept - 1.0) < 1e-4, `Expected intercept=1.0, got ${corrPerf.intercept}`);
+  assert.strictEqual(corrPerf.scatterPoints.length, 5);
+
+  // Low degrees-of-freedom guard: count < 3 returns NaN for pearsonR
+  const gA_tiny = new Float32Array([1, 2]);
+  const gB_tiny = new Float32Array([2, 4]);
+  const corrTiny = AQ.correlateGrids(gA_tiny, gB_tiny);
+  assert.strictEqual(corrTiny.count, 2);
+  assert(Number.isNaN(corrTiny.pearsonR), 'N < 3 should return NaN for pearsonR');
+
+  // Different length grids with NaN handling (auto-resampling)
+  const gA_long = new Float32Array([1, 2, NaN, 4, 5, 6, 7, 8]);
+  const gB_short = new Float32Array([2, 4, 6, 8]);
+  const corrDiff = AQ.correlateGrids(gA_long, gB_short);
+  assert(corrDiff.count >= 3);
+  assert(Number.isFinite(corrDiff.pearsonR), 'Resampled correlation should produce finite pearsonR');
+  console.log('✓ Multi-sensor grid correlation analysis verified.');
+
+  console.log('--- 14. Testing In-Situ Ground Monitors (fetchOpenAqStations) ---');
+  globalThis.fetch = async function (url, opts = {}) {
+    if (url.includes('api.openaq.org')) {
+      return {
+        ok: true,
+        json: async () => ({
+          results: [
+            {
+              id: 'aq_station_01',
+              location: 'Downtown Air Quality Monitor',
+              city: 'Metropolis',
+              country: 'NZ',
+              coordinates: { latitude: -40.35, longitude: 175.61 },
+              measurements: [
+                { parameter: 'pm25', value: 8.5, unit: 'µg/m³', lastUpdated: '2023-08-15T12:00:00Z' }
+              ]
+            },
+            {
+              id: 'aq_station_02_invalid',
+              coordinates: null
+            }
+          ]
+        })
+      };
+    }
+    return origFetch.apply(this, arguments);
+  };
+
+  const stations = await AQ.fetchOpenAqStations([175.5, -40.4, 175.7, -40.3], { parameter: 'pm25' });
+  assert.strictEqual(stations.length, 1, 'Should filter out stations without valid coordinates');
+  assert.strictEqual(stations[0].id, 'aq_station_01');
+  assert.strictEqual(stations[0].parameter, 'pm25');
+  assert.strictEqual(stations[0].value, 8.5);
+  assert.strictEqual(stations[0].unit, 'µg/m³');
+  console.log('✓ OpenAQ ground monitoring integration verified.');
+
+  console.log('--- 15. Testing Web Worker NetCDF Gridding ---');
+  const workerGridded = await AQ.gridS5pNetCdfBufferInWorker(new ArrayBuffer(32), 'no2', [12.0, 41.0, 13.0, 42.0], 10, 10);
+  assert(workerGridded.grid instanceof Float32Array);
+  assert.strictEqual(workerGridded.matchedFootprints, 1);
+  console.log('✓ Web Worker NetCDF gridding with graceful fallback verified.');
 
   console.log('\n========================================');
   console.log('All air quality tests passed successfully!');

@@ -213,6 +213,16 @@
             if(a<0||a>5.0||w<0) return NaN;
             return Math.max(0, (a*85.0)/(1.0*(1.0+0.18*Math.min(5.0,Math.max(0,w)))));
           }
+          case 'aerosol_type': {
+            let c=b[0], bl=b[1], s=b[2];
+            if(c<=0||bl<=0||s<=0) return NaN;
+            let asi=(c-bl)/(c+bl), cdi=(s-c)/(s+c);
+            if(!Number.isFinite(asi)||!Number.isFinite(cdi)) return NaN;
+            if(asi>=0.08&&cdi>=0.05) return 3;
+            if(cdi>=0.10&&asi<0.12) return 2;
+            if(asi>=0.08&&cdi<0.05) return 1;
+            return 0;
+          }
           default: return NaN;
         }
       }

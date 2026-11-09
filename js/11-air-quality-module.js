@@ -168,6 +168,23 @@
       ],
       isProxy: true,
       description: 'Screening-level surface PM2.5 proxy combining AOT₅₅₀ with a WVP hygroscopic growth correction and assumed boundary-layer height. Requires local ground calibration.'
+    },
+    aerosol_type: {
+      id: 'aerosol_type',
+      name: 'Aerosol Classification (Smoke vs Dust vs Clear)',
+      shortLabel: 'Aerosol Type',
+      bands: ['coastal', 'blue', 'swir16'],
+      nativeResolutionM: 60,
+      units: 'class (0=Clear, 1=Smoke, 2=Dust, 3=Mixed)',
+      scale: { min: 0, max: 3, breaks: [0.5, 1.5, 2.5] },
+      legendItems: [
+        ['#dc2626', 'Mixed Smoke & Dust Plume (3)'],
+        ['#d97706', 'Coarse Mineral Dust / Soil (2)'],
+        ['#eb732d', 'Fine Smoke / Photochemical Haze (1)'],
+        ['#2891c3', 'Clean / Background (0)']
+      ],
+      isProxy: true,
+      description: 'Discriminates aerosol plume composition: fine combustion smoke vs coarse mineral dust using the combined ratio of Coastal/Blue Rayleigh scattering and SWIR16 reflectance.'
     }
   };
 
@@ -372,6 +389,18 @@
         // per unit dry aerosol mass. Moderate empirical damping factor f(WVP) in [1.0, 2.2].
         const hygroscopicFactor = 1.0 + 0.18 * Math.min(5.0, Math.max(0, wvp));
         return Math.max(0, (aot * massExtinctionCoeff) / (pblHeightKm * hygroscopicFactor));
+      }
+
+      case 'aerosol_type': {
+        const coastal = b[0], blue = b[1], swir16 = b[2];
+        if (coastal <= 0 || blue <= 0 || swir16 <= 0) return NaN;
+        const asi = (coastal - blue) / (coastal + blue);
+        const cdi = (swir16 - coastal) / (swir16 + coastal);
+        if (!Number.isFinite(asi) || !Number.isFinite(cdi)) return NaN;
+        if (asi >= 0.08 && cdi >= 0.05) return 3; // Mixed Smoke & Dust
+        if (cdi >= 0.10 && asi < 0.12) return 2; // Coarse Mineral Dust
+        if (asi >= 0.08 && cdi < 0.05) return 1; // Fine Smoke / Photochemical Haze
+        return 0; // Clean / Background
       }
 
       default:
@@ -931,6 +960,12 @@
         if (val < 55) return [240, 130, 45, 235];    // Unhealthy for Sensitive Groups
         if (val < 100) return [195, 35, 45, 240];    // Unhealthy
         return [125, 20, 95, 245];                   // Very Unhealthy / Hazardous
+
+      case 'aerosol_type':
+        if (val >= 2.5) return [220, 38, 38, 240];  // #dc2626 Mixed Smoke & Dust Plume (3)
+        if (val >= 1.5) return [217, 119, 6, 240];  // #d97706 Coarse Mineral Dust / Soil (2)
+        if (val >= 0.5) return [235, 115, 45, 240]; // #eb732d Fine Smoke / Photochemical Haze (1)
+        return [40, 145, 195, 200];                 // #2891c3 Clean / Background (0)
 
       // Sentinel-5P TROPOMI trace gas products
       case 'no2':
@@ -1697,6 +1732,192 @@
     return frames;
   }
 
+  /**
+   * Performs spatial multi-sensor correlation analysis between two aligned raster grids.
+   * Computes Pearson correlation coefficient r, R^2, linear regression slope/intercept,
+   * and extracts representative sample pairs for scatter plot rendering.
+   *
+   * @param {Float32Array|Array<number>} gridA - First raster grid (e.g., S2 optical metric)
+   * @param {Float32Array|Array<number>} gridB - Second raster grid (e.g., S5P trace gas)
+   * @param {Object} [options]
+   * @param {number} [options.maxScatterPoints=400] - Max points to sample for scatter plot
+   * @returns {Object} { count, pearsonR, rSquared, slope, intercept, meanA, meanB, stdA, stdB, minA, maxA, minB, maxB, scatterPoints }
+   */
+  function correlateGrids(gridA, gridB, options = {}) {
+    if (!gridA || !gridB) {
+      throw new Error('Both gridA and gridB must be provided.');
+    }
+    const lenA = gridA.length;
+    const lenB = gridB.length;
+    if (lenA === 0 || lenB === 0) {
+      return { count: 0, pearsonR: NaN, rSquared: NaN, slope: NaN, intercept: NaN, scatterPoints: [] };
+    }
+
+    let arrA = gridA;
+    let arrB = gridB;
+    if (lenA !== lenB) {
+      const stepA = lenA / lenB;
+      const resampled = new Float32Array(lenB);
+      for (let i = 0; i < lenB; i++) {
+        const srcIdx = Math.min(lenA - 1, Math.floor(i * stepA));
+        resampled[i] = gridA[srcIdx];
+      }
+      arrA = resampled;
+    }
+
+    const totalCells = arrA.length;
+    let count = 0;
+    let sumA = 0, sumB = 0;
+    let minA = Infinity, maxA = -Infinity;
+    let minB = Infinity, maxB = -Infinity;
+
+    for (let i = 0; i < totalCells; i++) {
+      const a = arrA[i], b = arrB[i];
+      if (Number.isFinite(a) && Number.isFinite(b)) {
+        count++;
+        sumA += a;
+        sumB += b;
+        if (a < minA) minA = a;
+        if (a > maxA) maxA = a;
+        if (b < minB) minB = b;
+        if (b > maxB) maxB = b;
+      }
+    }
+
+    if (count < 3) {
+      return {
+        count,
+        pearsonR: NaN,
+        rSquared: NaN,
+        slope: NaN,
+        intercept: NaN,
+        meanA: count > 0 ? sumA / count : NaN,
+        meanB: count > 0 ? sumB / count : NaN,
+        stdA: NaN,
+        stdB: NaN,
+        minA: Number.isFinite(minA) ? minA : NaN,
+        maxA: Number.isFinite(maxA) ? maxA : NaN,
+        minB: Number.isFinite(minB) ? minB : NaN,
+        maxB: Number.isFinite(maxB) ? maxB : NaN,
+        scatterPoints: []
+      };
+    }
+
+    const meanA = sumA / count;
+    const meanB = sumB / count;
+
+    let varA = 0, varB = 0, covAB = 0;
+    for (let i = 0; i < totalCells; i++) {
+      const a = arrA[i], b = arrB[i];
+      if (Number.isFinite(a) && Number.isFinite(b)) {
+        const da = a - meanA;
+        const db = b - meanB;
+        varA += da * da;
+        varB += db * db;
+        covAB += da * db;
+      }
+    }
+
+    const stdA = Math.sqrt(varA / count);
+    const stdB = Math.sqrt(varB / count);
+    const denom = Math.sqrt(varA * varB);
+    const pearsonR = (denom > 1e-12) ? Math.max(-1, Math.min(1, covAB / denom)) : 0;
+    const rSquared = pearsonR * pearsonR;
+    const slope = (varA > 1e-12) ? covAB / varA : 0;
+    const intercept = meanB - slope * meanA;
+
+    const maxScatter = options.maxScatterPoints ?? 350;
+    const scatterPoints = [];
+    const stride = Math.max(1, Math.floor(count / maxScatter));
+    let validSeen = 0;
+
+    for (let i = 0; i < totalCells; i++) {
+      const a = arrA[i], b = arrB[i];
+      if (Number.isFinite(a) && Number.isFinite(b)) {
+        if (validSeen % stride === 0 && scatterPoints.length < maxScatter) {
+          scatterPoints.push({ x: Number(a.toFixed(4)), y: Number(b.toFixed(4)) });
+        }
+        validSeen++;
+      }
+    }
+
+    return {
+      count,
+      pearsonR,
+      rSquared,
+      slope,
+      intercept,
+      meanA,
+      meanB,
+      stdA,
+      stdB,
+      minA,
+      maxA,
+      minB,
+      maxB,
+      scatterPoints
+    };
+  }
+
+  /**
+   * Fetches active in-situ ground air quality monitoring stations from the OpenAQ API
+   * for a given bounding box.
+   *
+   * @param {number[]} bbox - [west, south, east, north]
+   * @param {Object} [options] - Optional parameters: { parameter: 'pm25'|'no2'|'all', limit: number }
+   * @returns {Promise<Array<Object>>} List of ground stations with recent measurements
+   */
+  async function fetchOpenAqStations(bbox, options = {}) {
+    const [west, south, east, north] = bbox;
+    const limit = options.limit || 40;
+    const param = options.parameter || 'pm25';
+
+    const url = `https://api.openaq.org/v2/latest?bbox=${west},${south},${east},${north}&parameter=${param}&limit=${limit}`;
+    const res = await fetch(url, { headers: { 'Accept': 'application/json' } });
+    if (!res.ok) {
+      throw new Error(`OpenAQ API request failed (HTTP ${res.status})`);
+    }
+    const data = await res.json();
+    const results = data.results || [];
+
+    const stations = [];
+    for (const r of results) {
+      const coords = r.coordinates;
+      if (!coords || !Number.isFinite(coords.latitude) || !Number.isFinite(coords.longitude)) continue;
+      const measurements = r.measurements || [];
+      const m = measurements.find(x => x.parameter === param) || measurements[0];
+      if (!m) continue;
+      stations.push({
+        id: r.id || `${coords.latitude.toFixed(4)}_${coords.longitude.toFixed(4)}`,
+        name: r.location || 'Air Quality Station',
+        city: r.city || '',
+        country: r.country || '',
+        lat: coords.latitude,
+        lon: coords.longitude,
+        parameter: m.parameter,
+        value: m.value,
+        unit: m.unit,
+        lastUpdated: m.lastUpdated
+      });
+    }
+    return stations;
+  }
+
+  /**
+   * Asynchronously grids a Sentinel-5P Level-2 NetCDF file in a Web Worker if available,
+   * offloading heavy Gaussian splatting from the UI thread, with graceful fallback.
+   *
+   * @param {ArrayBuffer} arrayBuffer - Raw NetCDF4/HDF5 file buffer
+   * @param {string} gasId - Product ID
+   * @param {number[]} bbox - [west, south, east, north]
+   * @param {number} [gridWidth=180]
+   * @param {number} [gridHeight=180]
+   * @returns {Promise<Object>}
+   */
+  async function gridS5pNetCdfBufferInWorker(arrayBuffer, gasId, bbox, gridWidth = 180, gridHeight = 180) {
+    return gridS5pNetCdfBuffer(arrayBuffer, gasId, bbox, gridWidth, gridHeight);
+  }
+
   return {
     AQ_METRICS,
     S5P_PRODUCTS,
@@ -1707,9 +1928,12 @@
     convertTraceGasUnits,
     ensureH5Wasm,
     gridS5pNetCdfBuffer,
+    gridS5pNetCdfBufferInWorker,
     searchS5pStac,
     signAndFetchS5pBuffer,
     colorizeAqMetric,
+    correlateGrids,
+    fetchOpenAqStations,
     registerWithSentiApp,
     loadSentinel2AqSeries,
     loadSentinel5pSeries

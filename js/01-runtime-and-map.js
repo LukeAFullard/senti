@@ -123,6 +123,7 @@
   temporalMode.addEventListener('change', () => {
     const isComp = temporalMode.value !== 'single';
     compositeConfigBox.style.display = isComp ? 'grid' : 'none';
+    s2PipelineMachine?.send('CHANGE_TEMPORAL', { temporalMode: temporalMode.value });
     if (validScenes.length > 0) {
       rebuildDisplaySteps();
       displayStepByIndex(Number(sceneSlider.value));
@@ -513,6 +514,36 @@
   let displaySteps = [];
   let activeRenderedState = null;
 
+  // ============================================================================
+  // Explicit Finite State Machines (UX, DX, and AX)
+  // ============================================================================
+  const s2PipelineMachine = (typeof SentiStateMachine !== 'undefined' && SentiStateMachine.createMachine)
+    ? SentiStateMachine.createMachine(SentiStateMachine.schemas.S2_PIPELINE)
+    : null;
+
+  const mapInteractionMachine = (typeof SentiStateMachine !== 'undefined' && SentiStateMachine.createMachine)
+    ? SentiStateMachine.createMachine(SentiStateMachine.schemas.MAP_INTERACTION)
+    : null;
+
+  if (typeof window !== 'undefined') {
+    window.s2PipelineMachine = s2PipelineMachine;
+    window.mapInteractionMachine = mapInteractionMachine;
+  }
+
+  // Subscribe UI to Pipeline State transitions for deterministic button & ARIA states
+  if (s2PipelineMachine) {
+    s2PipelineMachine.subscribe((state, prev, event) => {
+      const isBusy = (state === 'SEARCHING_STAC' || state === 'LOADING_DATA' || state === 'RENDERING_SCENE');
+      if (runBtn) {
+        runBtn.disabled = isBusy || !drawnBbox;
+        runBtn.setAttribute('aria-busy', String(isBusy));
+      }
+      if (state === 'DISPLAY_READY') {
+        if (pngBtn) pngBtn.disabled = !activeRenderedState;
+      }
+    });
+  }
+
   const sceneRawCache = new LRUCache(12);
   const compositeCache = new LRUCache(6);
   let optramCalibration = null;
@@ -615,10 +646,24 @@
     probePolygon = null;
     probePolygonLayer = null;
     updatePointStatus();
+    if (mapInteractionMachine) {
+      if (mapInteractionMachine.getState() === 'POINT_PROBING') {
+        mapInteractionMachine.send('CLEAR_POINTS');
+      } else if (mapInteractionMachine.getState() === 'TRANSECT_ACTIVE') {
+        mapInteractionMachine.send('CLEAR_TRANSECT');
+      } else if (mapInteractionMachine.getState() === 'POLYGON_ACTIVE') {
+        mapInteractionMachine.send('CLEAR_POLYGON');
+      }
+    }
   }
 
   function setPointSelectionMode(enabled) {
     pointSelectionMode = Boolean(enabled);
+    if (pointSelectionMode) {
+      mapInteractionMachine?.send('ENABLE_POINT_MODE');
+    } else if (mapInteractionMachine?.getState() === 'POINT_PROBING') {
+      mapInteractionMachine.send('DISABLE_POINT_MODE');
+    }
     pointModeBtn.setAttribute('aria-pressed', String(pointSelectionMode));
     pointModeBtn.textContent = pointSelectionMode ? 'Click-to-Add Points: ON' : 'Enable Click-to-Add Points';
     pointModeBtn.style.background = pointSelectionMode ? '#247a46' : '';
@@ -653,6 +698,14 @@
   // Actually, we can just trigger the disable on the map instance safely by clearing drawing state.
   map.on('draw:drawstart', function (e) {
     setPointSelectionMode(false);
+    const layerType = e.layerType;
+    if (layerType === 'rectangle') {
+      mapInteractionMachine?.send('DRAW_AOI_START');
+    } else if (layerType === 'polyline') {
+      mapInteractionMachine?.send('DRAW_TRANSECT_START');
+    } else if (layerType === 'polygon') {
+      mapInteractionMachine?.send(drawnBbox ? 'DRAW_POLYGON_START' : 'DRAW_AOI_START');
+    }
   });
 
   document.addEventListener('keydown', (e) => {
@@ -667,6 +720,7 @@
           }
       }
       setPointSelectionMode(false);
+      mapInteractionMachine?.send('CANCEL');
     }
   });
 
@@ -688,6 +742,8 @@
       aoiGroup.addLayer(layer);
       const b = layer.getBounds();
       drawnBbox = [b.getWest(), b.getSouth(), b.getEast(), b.getNorth()];
+      s2PipelineMachine?.send('SET_AOI', { bbox: drawnBbox });
+      mapInteractionMachine?.send('AOI_COMPLETE');
       log('AOI Rectangle set: ' + drawnBbox.map(v => v.toFixed(5)).join(', '));
       runBtn.disabled = false;
       runBtn.textContent = 'Search & Render Scenes';
@@ -714,6 +770,8 @@
 
       const b = layer.getBounds();
       drawnBbox = [b.getWest(), b.getSouth(), b.getEast(), b.getNorth()];
+      s2PipelineMachine?.send('SET_AOI', { bbox: drawnBbox });
+      mapInteractionMachine?.send('AOI_COMPLETE');
 
       log(`Analysis Polygon AOI set (${probePolygon.length} edges). BBox: ` + drawnBbox.map(v => v.toFixed(5)).join(', '));
       runBtn.disabled = false;
@@ -726,6 +784,7 @@
       probeGroup.addLayer(layer);
       probeLineLayer = layer;
       probeLine = layer.getLatLngs().map(ll => [ll.lng, ll.lat]);
+      mapInteractionMachine?.send('TRANSECT_COMPLETE');
       updateCsvButtonState();
       updatePolygonStatsPanel(activeRenderedState?.raw || null, activeRenderedState?.inspectGrid || null);
       log(`Transect line drawn (${probeLine.length} vertices).`);
@@ -737,6 +796,7 @@
       const rings = layer.getLatLngs();
       const outerRing = Array.isArray(rings[0]) ? rings[0] : rings;
       probePolygon = outerRing.map(ll => [ll.lng, ll.lat]);
+      mapInteractionMachine?.send('POLYGON_COMPLETE');
       updateCsvButtonState();
       log(`Summary polygon drawn (${Math.max(0, probePolygon.length)} edges).`);
       updatePolygonStatsPanel(activeRenderedState?.raw || null, activeRenderedState?.inspectGrid || null);

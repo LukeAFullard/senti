@@ -4,6 +4,17 @@
 
 'use strict';
 
+  // ============================================================================
+  // Seasonal Anomaly State Machine (FSM)
+  // ============================================================================
+  const seasonalAnomalyMachine = (typeof SentiStateMachine !== 'undefined' && SentiStateMachine.createMachine)
+    ? SentiStateMachine.createMachine(SentiStateMachine.schemas.SEASONAL_ANOMALY)
+    : null;
+
+  if (typeof window !== 'undefined') {
+    window.seasonalAnomalyMachine = seasonalAnomalyMachine;
+  }
+
   // Sentinel-1 RTC: public STAC search, short-lived asset URL signing, and local
   // raster analysis. RTC backscatter is expressed as relative dB after scaling.
   // --------------------------------------------------------------------------
@@ -116,6 +127,7 @@
     }
     seasonalAnomalyBtn.disabled = true;
     seasonalAnomalyBtn.textContent = 'Calculating…';
+    seasonalAnomalyMachine?.send('START_CALC');
     seasonalAnomalyStatus.textContent = `Loading ${candidates.length} clear-masked reference scenes from other years for ${targetInfo.date}…`;
     clearSeasonalAnomalyOverlay();
     try {
@@ -173,8 +185,10 @@
       }
       const validPct=100*n/Math.max(1,result.indexGrid.length);
       seasonalAnomalyStatus.innerHTML = `<strong>${escapeHtml(targetInfo.date)} · ${escapeHtml(mode.toUpperCase())} seasonal anomaly</strong><br>Other-year references used: ${candidates.length}${candidateTotal>candidates.length?` of ${candidateTotal} eligible scenes (memory cap)`:''}; season window: ±${windowDays} days; minimum clear observations per pixel: ${minObs}.<br>Pixels with a supported anomaly: ${validPct.toFixed(1)}%; score ≥ +1: ${(100*pos/Math.max(1,n)).toFixed(1)}%; score ≤ −1: ${(100*neg/Math.max(1,n)).toFixed(1)}%; mean absolute score: ${(absSum/Math.max(1,n)).toFixed(2)}.<br><span class="small-note">Positive means the index is higher than its other-year seasonal median; negative means lower. Where the historical MAD is zero but the target differs, the score saturates at the display limit. Only display colours are capped; exported anomaly values are unclamped robust scores (except where MAD = 0).</span>`;
+      seasonalAnomalyMachine?.send('CALC_SUCCESS');
       log(`Seasonal anomaly complete for ${targetInfo.date} (${mode}): ${candidates.length} other-year references; ${validPct.toFixed(1)}% valid pixels.`);
     } catch (err) {
+      seasonalAnomalyMachine?.send('ERROR', { error: err.message });
       seasonalAnomalyStatus.textContent = 'Seasonal anomaly failed: ' + err.message;
       log('Seasonal anomaly error: ' + err.message);
     } finally {
@@ -185,10 +199,12 @@
 
   clearAnomalyBtn.addEventListener('click', () => {
     clearSeasonalAnomalyOverlay();
+    seasonalAnomalyMachine?.send('CLEAR');
     seasonalAnomalyStatus.textContent = 'Seasonal anomaly overlay cleared. Recalculate to show it again.';
   });
 
   exportAnomalyBtn.addEventListener('click', async () => {
+    seasonalAnomalyMachine?.send('EXPORT');
     const result = seasonalAnomalyResult;
     if (!result?.raw?.indexGrid) return;
     if (typeof GeoTIFF === 'undefined' || typeof GeoTIFF.writeArrayBuffer !== 'function') {

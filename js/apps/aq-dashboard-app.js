@@ -37,8 +37,36 @@
   let openAqLayerGroup = null;
   let openAqVisible = false;
 
+  // ============================================================================
+  // Explicit Finite State Machine (UX, DX, and AX)
+  // ============================================================================
+  const aqMachine = (typeof SentiStateMachine !== 'undefined' && SentiStateMachine.createMachine)
+    ? SentiStateMachine.createMachine(SentiStateMachine.schemas.AQ_DASHBOARD)
+    : null;
+
+  if (typeof window !== 'undefined') {
+    window.aqDashboardMachine = aqMachine;
+  }
+
   // DOM
   const el = id => document.getElementById(id);
+
+  if (aqMachine) {
+    aqMachine.subscribe((state, prev, event) => {
+      const isBusy = (state === 'LOADING_DATA');
+      const searchBtn = el('searchAndLoadBtn');
+      if (searchBtn) {
+        searchBtn.disabled = isBusy;
+        searchBtn.setAttribute('aria-busy', String(isBusy));
+      }
+      const timelineBtn = el('showTimelineChartBtn');
+      const corrBtn = el('showCorrelationChartBtn');
+      if (timelineBtn && corrBtn) {
+        timelineBtn.setAttribute('aria-pressed', String(state === 'DATA_LOADED'));
+        corrBtn.setAttribute('aria-pressed', String(state === 'SCATTER_ANALYSIS'));
+      }
+    });
+  }
 
   function log(msg) {
     const box = el('aqLog');
@@ -115,6 +143,7 @@
     el('aqStartDate').value = start.toISOString().slice(0, 10);
 
     presetSel.addEventListener('change', () => {
+      aqMachine?.send('SELECT_PRESET', { preset: presetSel.value });
       if (presetSel.value === 'custom') {
         if (map) {
           const b = map.getBounds();
@@ -145,12 +174,16 @@
     }
 
     el('searchAndLoadBtn').addEventListener('click', handleSearchAndLoad);
-    el('temporalViewMode').addEventListener('change', updateActiveDisplay);
+    el('temporalViewMode').addEventListener('change', () => {
+      aqMachine?.send('SET_VIEW_MODE', { mode: el('temporalViewMode').value });
+      updateActiveDisplay();
+    });
     el('aggStatistic').addEventListener('change', updateActiveDisplay);
     el('anomalyDiffChk').addEventListener('change', updateActiveDisplay);
 
     el('timeSlider').addEventListener('input', () => {
       const idx = parseInt(el('timeSlider').value, 10);
+      aqMachine?.send('CHANGE_FRAME', { frameIndex: idx });
       renderFrame(idx);
     });
 
@@ -183,6 +216,7 @@
     const timelineBtn = el('showTimelineChartBtn');
     if (timelineBtn) timelineBtn.addEventListener('click', () => {
       activeChartMode = 'timeline';
+      aqMachine?.send('VIEW_TIMELINE');
       el('chartTitle').textContent = 'Temporal Timeline';
       updateChartWithActiveFrame();
     });
@@ -190,6 +224,7 @@
     const corrBtn = el('showCorrelationChartBtn');
     if (corrBtn) corrBtn.addEventListener('click', () => {
       activeChartMode = 'correlation';
+      aqMachine?.send('VIEW_SCATTER');
       el('chartTitle').textContent = 'Multi-Sensor Scatter Plot';
       updateChartWithActiveFrame();
     });
@@ -203,6 +238,7 @@
 
   async function handleSearchAndLoad() {
     const btn = el('searchAndLoadBtn');
+    aqMachine?.send('START_LOAD');
     btn.disabled = true;
     log('Starting satellite time-series search and load...');
 
@@ -255,6 +291,7 @@
       slider.max = Math.max(0, frames.length - 1);
       slider.value = 0;
 
+      aqMachine?.send('LOAD_SUCCESS', { count: frames.length, sensor, metric });
       updateActiveDisplay();
       populateStatsTable();
     } catch (err) {
@@ -275,6 +312,7 @@
       slider.min = 0;
       slider.max = Math.max(0, loadedFrames.length - 1);
       slider.value = 0;
+      aqMachine?.send('LOAD_SUCCESS', { count: loadedFrames.length, synthetic: true });
       updateActiveDisplay();
       populateStatsTable();
     } finally {
@@ -649,6 +687,7 @@
       if (openAqLayerGroup) map.removeLayer(openAqLayerGroup);
       openAqLayerGroup = null;
       openAqVisible = false;
+      aqMachine?.send('TOGGLE_GROUND_MONITORS', { visible: false });
       if (btn) {
         btn.textContent = 'In-Situ Monitors (OpenAQ)';
         btn.classList.add('btn-secondary');
@@ -709,6 +748,7 @@
       }
       openAqLayerGroup.addTo(map);
       openAqVisible = true;
+      aqMachine?.send('TOGGLE_GROUND_MONITORS', { visible: true, count: stations.length });
       if (btn) {
         btn.textContent = `Hide Ground Monitors (${stations.length})`;
         btn.classList.remove('btn-secondary');

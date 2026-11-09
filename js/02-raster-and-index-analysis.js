@@ -691,7 +691,7 @@
           const pixelBands = bandArrays.map(arr => arr[i]);
           indexGrid[i] = calculateIndexValue(mode, pixelBands);
         }
-        if (!cpuWorkerAttempted || !cpuWorker) {
+        if (typeof SentiWorkerPool !== 'undefined' ? !SentiWorkerPool.isSupported() : (!cpuWorkerAttempted || !cpuWorker)) {
           console.info('Index calculation used the main thread because a CPU worker was unavailable.');
         } else {
           console.warn('Index calculation worker failed; used the main-thread fallback.', workerErr);

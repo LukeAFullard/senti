@@ -16,6 +16,10 @@
       "responsibility": "Universal, zero-DOM Finite State Machine engine, state schemas, pub/sub bus, and agent introspection API"
     },
     {
+      "path": "js/core/00-worker-pool.js",
+      "responsibility": "Universal, zero-DOM Web Worker pool, zero-copy buffer transfers, CPU task executor, and Otsu flood/water thresholding"
+    },
+    {
       "path": "js/01-runtime-and-map.js",
       "responsibility": "Runtime, DOM references, shared state, map setup and interaction"
     },

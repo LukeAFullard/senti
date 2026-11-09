@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "description": "Browser-based multi-sensor satellite Earth observation and air quality monitoring toolkit",
   "scripts": {
-    "test": "node tests/test_toolkit_core.js && node tests/test_stac_and_cog_reader.js && node tests/test_state_machine.js && node tests/test_worker_pool.js && node tests/test_air_quality.js",
+    "test": "node tests/test_toolkit_core.js && node tests/test_stac_and_cog_reader.js && node tests/test_state_machine.js && node tests/test_worker_pool.js && node tests/test_export_services.js && node tests/test_air_quality.js",
     "check": "node -c js/core/*.js js/*.js js/apps/*.js tests/*.js"
   },
   "keywords": [

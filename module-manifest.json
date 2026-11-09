@@ -20,6 +20,10 @@
       "responsibility": "Universal, zero-DOM Web Worker pool, zero-copy buffer transfers, CPU task executor, and Otsu flood/water thresholding"
     },
     {
+      "path": "js/core/00-export-services.js",
+      "responsibility": "Universal, zero-DOM geospatial and media export engine (GeoTIFF, RFC 7946 GeoJSON, CSV, reproducibility report, GIF download)"
+    },
+    {
       "path": "js/01-runtime-and-map.js",
       "responsibility": "Runtime, DOM references, shared state, map setup and interaction"
     },

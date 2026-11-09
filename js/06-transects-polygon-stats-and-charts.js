@@ -222,10 +222,12 @@
         : [isRgbMode
           ? 'step_label,date_str,point_id,sample_index,distance_m,longitude,latitude,mode,value,red,green,blue,scene_cloud_pct,aoi_cloud_pct'
           : 'step_label,date_str,point_id,sample_index,distance_m,longitude,latitude,mode,value,scene_cloud_pct,aoi_cloud_pct'];
-      const csvCell = value => {
-        const str = String(value ?? '');
-        return /[",\n\r]/.test(str) ? '"' + str.replace(/"/g, '""') + '"' : str;
-      };
+      const csvCell = (typeof SentiExportServices !== 'undefined' && SentiExportServices.formatCsvCell)
+        ? SentiExportServices.formatCsvCell
+        : (value => {
+            const str = String(value ?? '');
+            return /[",\n\r]/.test(str) ? '"' + str.replace(/"/g, '""') + '"' : str;
+          });
       const valueCells = (raw, lon, lat) => {
         if (isRgbMode && raw?.rgbChannels) {
           const rgb = sampleValueAtLonLat(raw, null, lon, lat);
@@ -292,14 +294,19 @@
         }
       }
 
-      const blob = new Blob([rows.join('\n')], { type: 'text/csv;charset=utf-8;' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
       const probeName = probePolygon ? 'polygon_summary' : (probeLine ? 'transect' : (probePoints.length > 1 ? 'points' : 'point'));
-      a.download = `sentinel2_${probeName}_${mode}_${temporalMode.value}.csv`;
-      a.click();
-      setTimeout(() => URL.revokeObjectURL(url), 5000);
+      const filename = `sentinel2_${probeName}_${mode}_${temporalMode.value}.csv`;
+      if (typeof SentiExportServices !== 'undefined' && SentiExportServices.triggerBlobDownload) {
+        SentiExportServices.triggerBlobDownload(rows.join('\n'), filename, 'text/csv;charset=utf-8;');
+      } else {
+        const blob = new Blob([rows.join('\n')], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        a.click();
+        setTimeout(() => URL.revokeObjectURL(url), 5000);
+      }
       log(`Exported ${rows.length - 1} rows to CSV.`);
       updateChart();
     } catch (err) {

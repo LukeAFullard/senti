@@ -23,6 +23,9 @@ This map records the current extraction boundaries and the intended next destina
 | Sentinel-1 STAC search, asset signing, remote/local RTC reads, radar display and optical/radar comparison | `js/09-seasonal-anomaly-and-radar-discovery.js`, `js/10-radar-rendering-and-comparison.js` | `data/sentinel1.js`, `analysis/radar-analysis.js`, `features/radar-comparison.js`; keep optional and isolate provider auth/CORS limitations |
 | Air quality optical proxy indices (ASI, NGAI, SPDI, CDI), Sen2Cor DDV fallback diagnostics, S5P TROPOMI trace gas gridding (NO₂, SO₂, CO, O₃, CH₄, HCHO, UVAI), unit conversion, and host app wrapping | `js/11-air-quality-module.js` | `features/air-quality.js`, `data/sentinel5p.js`, `analysis/atmospheric.js` |
 | Standalone public air quality observatory application controller logic | `js/apps/aq-dashboard-app.js` | `apps/aq-observatory.js` |
+| Zero-DOM remote sensing hydrology algorithms: SAR backscatter drop detection ($\Delta \sigma_0$), Otsu binarization, surface area calculations, multi-temporal Inundation Frequency (IF), Ramsar wetland zoning, sub-canopy double-bounce detection, and color ramps (`SentiHydrologyCore`) | `js/core/00-hydrology-core.js` | `core/hydrology-core.js`; pure zero-DOM hydrology & hydroperiod analysis engine |
+| Standalone Sentinel-1 radar and optical flood inundation observatory application controller | `js/apps/flood-dashboard-app.js` | `apps/flood-observatory.js` |
+| Standalone multi-sensor wetland hydroperiod delineation observatory application controller | `js/apps/wetland-dashboard-app.js` | `apps/wetland-observatory.js` |
 
 ## Key contracts to define before further extraction
 
@@ -34,9 +37,10 @@ This map records the current extraction boundaries and the intended next destina
 
 ## What was actually verified in this pass
 
-- All JavaScript files pass `node --check`.
-- The pure core libraries `js/core/00-toolkit-core.js`, `js/core/00-stac-and-cog-reader.js`, `js/core/00-state-machine.js`, `js/core/00-worker-pool.js`, and `js/core/00-export-services.js` pass automated unit tests in `tests/test_toolkit_core.js` (7/7 tests passed), `tests/test_stac_and_cog_reader.js` (7/7 tests passed), `tests/test_state_machine.js` (10/10 tests passed), `tests/test_worker_pool.js` (10/10 tests passed), and `tests/test_export_services.js` (9/9 tests passed).
+- All JavaScript files pass `node --check` (`npm run check`).
+- The pure core libraries `js/core/00-toolkit-core.js`, `js/core/00-stac-and-cog-reader.js`, `js/core/00-state-machine.js`, `js/core/00-worker-pool.js`, `js/core/00-export-services.js`, and `js/core/00-hydrology-core.js` pass automated unit tests in `tests/test_toolkit_core.js` (7/7 tests passed), `tests/test_stac_and_cog_reader.js` (7/7 tests passed), `tests/test_state_machine.js` (10/10 tests passed), `tests/test_worker_pool.js` (10/10 tests passed), `tests/test_export_services.js` (9/9 tests passed), and `tests/test_hydrology_core.js` (8/8 tests passed).
 - The air quality module `js/11-air-quality-module.js` passes all 15 automated test suites in `tests/test_air_quality.js` including pixel metrics, grid calculation with masking, Sen2Cor DDV fallback diagnostics, trace gas unit conversion, color ramps, host app registration, Web Worker interception, live/mock STAC query formation, NetCDF swath gridding, Sentinel-2 / Sentinel-5P time series loading, multi-sensor grid correlation, and OpenAQ ground monitor fetching.
+- Total test coverage: 66 automated tests passing across 7 test suites with 0 failures (`npm test`).
 - Simulated sequential script execution in classic order verified no unhandled globals or collisions.
-- HTML entries (`index.html`, `air-quality-dashboard.html`, `test-app.html`) load modules in correct dependency order.
+- HTML entries (`index.html`, `air-quality-dashboard.html`, `flood-dashboard.html`, `wetland-dashboard.html`, `test-app.html`) load modules in correct dependency order.
 

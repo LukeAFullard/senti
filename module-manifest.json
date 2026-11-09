@@ -24,6 +24,10 @@
       "responsibility": "Universal, zero-DOM geospatial and media export engine (GeoTIFF, RFC 7946 GeoJSON, CSV, reproducibility report, GIF download)"
     },
     {
+      "path": "js/core/00-hydrology-core.js",
+      "responsibility": "Zero-DOM remote sensing hydrology engine: SAR specular change detection, flood Otsu binarization, Ramsar wetland zoning, sub-canopy double-bounce detection"
+    },
+    {
       "path": "js/01-runtime-and-map.js",
       "responsibility": "Runtime, DOM references, shared state, map setup and interaction"
     },
@@ -70,6 +74,14 @@
     {
       "path": "js/apps/aq-dashboard-app.js",
       "responsibility": "Standalone public air quality observatory application controller logic"
+    },
+    {
+      "path": "js/apps/flood-dashboard-app.js",
+      "responsibility": "Standalone Sentinel-1 radar and optical flood inundation observatory application controller"
+    },
+    {
+      "path": "js/apps/wetland-dashboard-app.js",
+      "responsibility": "Standalone multi-sensor wetland hydroperiod delineation observatory application controller"
     }
   ],
   "apps": [
@@ -80,6 +92,14 @@
     {
       "entry": "air-quality-dashboard.html",
       "responsibility": "Standalone public air quality observatory application"
+    },
+    {
+      "entry": "flood-dashboard.html",
+      "responsibility": "Standalone Sentinel-1/2 flood extent and disaster inundation observatory"
+    },
+    {
+      "entry": "wetland-dashboard.html",
+      "responsibility": "Standalone multi-sensor wetland hydroperiod delineation observatory"
     },
     {
       "entry": "test-app.html",

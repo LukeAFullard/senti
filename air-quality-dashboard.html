@@ -189,6 +189,7 @@
         <div style="display:flex; gap:8px; align-items:center;">
           <button type="button" class="btn-secondary" id="clickPointModeBtn" style="width:auto; margin:0;">Probe Transect Line</button>
           <button type="button" class="btn-secondary" id="clearProbesBtn" style="width:auto; margin:0;">Clear Probes</button>
+          <button type="button" class="btn-secondary" id="toggleOpenAqBtn" style="width:auto; margin:0;">In-Situ Monitors (OpenAQ)</button>
         </div>
         <div id="hoverReadout" style="font-family:monospace; color:#60a5fa;">Hover: --</div>
         <div style="display:flex; align-items:center; gap:6px;">
@@ -212,6 +213,13 @@
 
       <div class="analytics-grid">
         <div class="chart-container">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+            <span style="font-weight:600;" id="chartTitle">Temporal Timeline</span>
+            <div style="display:flex; gap:6px;">
+              <button type="button" class="btn-secondary" id="showTimelineChartBtn" style="width:auto; padding:2px 8px; margin:0; font-size:11px;">Timeline</button>
+              <button type="button" class="btn-secondary" id="showCorrelationChartBtn" style="width:auto; padding:2px 8px; margin:0; font-size:11px;">Multi-Sensor Scatter</button>
+            </div>
+          </div>
           <canvas id="aqChart"></canvas>
         </div>
         <div class="table-container">

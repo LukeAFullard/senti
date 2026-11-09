@@ -65,6 +65,7 @@
   const getRasterCrs = window.SentiStacCogReader.getRasterCrs;
   const transformBboxPerimeter = window.SentiStacCogReader.transformBboxPerimeter;
   const calculatePixelWindow = window.SentiStacCogReader.calculatePixelWindow;
+  const getAssetBandInfo = window.SentiStacCogReader.getAssetBandInfo;
 
   function calculatePixelWindowForReferenceGrid(referenceGrid, image, targetCrs) {
     const origin = image.getOrigin();
@@ -99,15 +100,6 @@
       throw new Error('Reference band footprint does not overlap this scene asset.');
     }
     return { window, origin, resolution };
-  }
-
-  function getAssetBandInfo(asset, fallback = { scale: 0.0001, offset: -0.1, nodata: 0 }) {
-    const band = asset && Array.isArray(asset['raster:bands']) ? asset['raster:bands'][0] : null;
-    return {
-      scale: band && Number.isFinite(Number(band.scale)) ? Number(band.scale) : fallback.scale,
-      offset: band && Number.isFinite(Number(band.offset)) ? Number(band.offset) : fallback.offset,
-      nodata: band && band.nodata !== undefined ? Number(band.nodata) : fallback.nodata
-    };
   }
 
   function getOutputSize(window) {
@@ -235,6 +227,9 @@
   }
 
   function calculateIndexValue(mode, bands) {
+    if (typeof AirQualityRemoteSensing !== 'undefined' && AirQualityRemoteSensing.AQ_METRICS && AirQualityRemoteSensing.AQ_METRICS[mode]) {
+      return AirQualityRemoteSensing.calculateAqPixel(mode, bands);
+    }
     if (!bands.every(Number.isFinite)) return NaN;
     const normalizedDifference = (a, b) => {
       const denom = a + b;

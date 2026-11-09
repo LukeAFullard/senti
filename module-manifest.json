@@ -68,6 +68,10 @@
     {
       "entry": "air-quality-dashboard.html",
       "responsibility": "Standalone public air quality observatory application"
+    },
+    {
+      "entry": "test-app.html",
+      "responsibility": "Interactive air quality remote sensing test suite and local map viewer"
     }
   ],
   "status": "phase-1 extraction; shared global scope remains"

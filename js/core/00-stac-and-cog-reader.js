@@ -52,6 +52,12 @@
   }
 
   function transformBboxPerimeter(bbox, sourceCrs, targetCrs, segments = BBOX_EDGE_SEGMENTS) {
+    const projFn = (typeof proj4 !== 'undefined')
+      ? proj4
+      : (typeof globalThis !== 'undefined' && globalThis.proj4 ? globalThis.proj4 : null);
+    if (typeof projFn !== 'function') {
+      throw new Error('proj4 is not available for coordinate transformation.');
+    }
     const [west, south, east, north] = bbox;
     const perimeter = [];
     for (let i = 0; i <= segments; i++) {
@@ -63,7 +69,7 @@
         [east, south + (north - south) * t]
       );
     }
-    return perimeter.map(pt => proj4(sourceCrs, targetCrs, pt));
+    return perimeter.map(pt => projFn(sourceCrs, targetCrs, pt));
   }
 
   function calculatePixelWindow(bbox, image, rasterCrs) {

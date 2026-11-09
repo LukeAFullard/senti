@@ -21,12 +21,15 @@ assert(typeof AQ.normalizeSen2CorAtmosphericGrid === 'function', 'normalizeSen2C
 assert(AQ.S5P_PRODUCTS && typeof AQ.S5P_PRODUCTS === 'object', 'S5P_PRODUCTS catalog must be exported');
 assert(typeof AQ.ensureH5Wasm === 'function', 'ensureH5Wasm must be a function');
 assert(typeof AQ.gridS5pNetCdfBuffer === 'function', 'gridS5pNetCdfBuffer must be a function');
+assert(typeof AQ.gridS5pNetCdfBufferInWorker === 'function', 'gridS5pNetCdfBufferInWorker must be a function');
 assert(typeof AQ.searchS5pStac === 'function', 'searchS5pStac must be a function');
 assert(typeof AQ.signAndFetchS5pBuffer === 'function', 'signAndFetchS5pBuffer must be a function');
 assert(typeof AQ.loadSentinel2AqSeries === 'function', 'loadSentinel2AqSeries must be a function');
 assert(typeof AQ.loadSentinel5pSeries === 'function', 'loadSentinel5pSeries must be a function');
+assert(typeof AQ.correlateGrids === 'function', 'correlateGrids must be a function');
+assert(typeof AQ.fetchOpenAqStations === 'function', 'fetchOpenAqStations must be a function');
 
-const expectedMetrics = ['s2_aot', 's2_wvp', 'asi', 'ngai', 'spdi', 'cdi', 'pm25_proxy'];
+const expectedMetrics = ['s2_aot', 's2_wvp', 'asi', 'ngai', 'spdi', 'cdi', 'pm25_proxy', 'aerosol_type'];
 for (const m of expectedMetrics) {
   assert(AQ.AQ_METRICS[m], `Metric ${m} must be defined in AQ_METRICS`);
   assert(Array.isArray(AQ.AQ_METRICS[m].bands), `Metric ${m} must specify bands array`);
@@ -81,6 +84,12 @@ assert(Math.abs(cdiVal - 0.25) < 1e-5, `CDI calculation mismatch: ${cdiVal}`);
 // pm25 = (0.3 * 85) / (1.0 * 1.36) = 25.5 / 1.36 = 18.75
 const pm25Val = AQ.calculateAqPixel('pm25_proxy', [0.3, 2.0]);
 assert(Math.abs(pm25Val - 18.75) < 1e-3, `PM2.5 calculation mismatch: ${pm25Val}`);
+
+// Test Aerosol Type classification (Smoke vs Dust vs Clear)
+assert.strictEqual(AQ.calculateAqPixel('aerosol_type', [0.10, 0.10, 0.10]), 0, 'Clean should classify as 0');
+assert.strictEqual(AQ.calculateAqPixel('aerosol_type', [0.30, 0.15, 0.10]), 1, 'Smoke should classify as 1');
+assert.strictEqual(AQ.calculateAqPixel('aerosol_type', [0.15, 0.14, 0.30]), 2, 'Mineral Dust should classify as 2');
+assert.strictEqual(AQ.calculateAqPixel('aerosol_type', [0.30, 0.15, 0.40]), 3, 'Mixed Plume should classify as 3');
 
 // Test invalid inputs
 assert(Number.isNaN(AQ.calculateAqPixel('s2_aot', [NaN])), 'NaN input should return NaN');
@@ -248,6 +257,307 @@ async function testWorkerAndLegend() {
   assert.strictEqual(hostWithWorkerAndLegend.legend.style.display, 'none', 'Legend should delegate to original updateLegend for non-AQ metric');
   console.log('✓ Worker interception and legend wrapper verified.');
 
+  console.log('--- 9. Testing S5P STAC Search Query Construction & Filtering ---');
+  const origFetch = globalThis.fetch;
+  let stacPayloadCaptured = null;
+  globalThis.fetch = async function (url, opts = {}) {
+    if (url.includes('stac/v1/search')) {
+      stacPayloadCaptured = JSON.parse(opts.body);
+      return {
+        ok: true,
+        json: async () => ({
+          features: [
+            {
+              id: 'S5P_RPRO_L2__NO2____20230802T120000',
+              properties: { datetime: '2023-08-02T12:00:00Z' },
+              assets: { no2: { href: 'https://blob.core.windows.net/s5p/no2_1.nc' } }
+            },
+            {
+              id: 'S5P_RPRO_L2__NO2____MISSING_ASSET',
+              properties: { datetime: '2023-08-03T12:00:00Z' },
+              assets: {}
+            },
+            {
+              id: 'S5P_RPRO_L2__NO2____20230804T120000',
+              properties: { datetime: '2023-08-04T12:00:00Z' },
+              assets: { no2: { href: 'https://blob.core.windows.net/s5p/no2_2.nc' } }
+            }
+          ]
+        })
+      };
+    }
+    if (url.includes('api/sas/v1/sign')) {
+      const rawHref = new URL(url).searchParams.get('href');
+      return {
+        ok: true,
+        json: async () => ({ href: `${rawHref}?token=test_sas` })
+      };
+    }
+    return origFetch.apply(this, arguments);
+  };
+
+  try {
+    const s5pFeatures = await AQ.searchS5pStac([12.0, 41.0, 13.0, 42.0], 'no2', '2023-08-01', '2023-08-05', 20);
+    assert.strictEqual(stacPayloadCaptured.collections[0], 'sentinel-5p-l2-netcdf');
+    assert.deepEqual(stacPayloadCaptured.bbox, [12.0, 41.0, 13.0, 42.0]);
+    assert.strictEqual(stacPayloadCaptured.datetime, '2023-08-01T00:00:00Z/2023-08-05T23:59:59Z');
+    assert(Array.isArray(stacPayloadCaptured.query['s5p:product_name'].in));
+    assert(stacPayloadCaptured.query['s5p:product_name'].in.includes('no2'));
+
+    // Features without required asset filtered out; sorted newest first
+    assert.strictEqual(s5pFeatures.length, 2, 'Should filter out feature missing no2 asset');
+    assert.strictEqual(s5pFeatures[0].id, 'S5P_RPRO_L2__NO2____20230804T120000', 'Should sort newest first');
+    assert.strictEqual(s5pFeatures[1].id, 'S5P_RPRO_L2__NO2____20230802T120000');
+
+    // Unknown product throws
+    let unknownGasErr = null;
+    try {
+      await AQ.searchS5pStac([0, 0, 1, 1], 'fake_gas', '2023-01-01', '2023-01-02');
+    } catch (e) {
+      unknownGasErr = e;
+    }
+    assert(unknownGasErr !== null, 'Unknown gas should throw error');
+  } finally {
+    globalThis.fetch = origFetch;
+  }
+  console.log('✓ S5P STAC query construction and candidate resolution verified.');
+
+  console.log('--- 10. Testing Sentinel-5P NetCDF Mock Gridding ---');
+  const mockUnlinks = [];
+  globalThis.h5wasm = {
+    ready: Promise.resolve(),
+    FS: {
+      writeFile: () => {},
+      unlink: (f) => { mockUnlinks.push(f); }
+    },
+    File: class MockH5File {
+      constructor(fn) { this.fn = fn; }
+      get(path) {
+        if (path === 'PRODUCT/latitude') return { value: new Float32Array([41.5, 41.5, 50.0, NaN]) };
+        if (path === 'PRODUCT/longitude') return { value: new Float32Array([12.5, 12.5, 12.5, 12.5]) };
+        if (path === 'PRODUCT/qa_value') return { value: new Float32Array([0.90, 0.20, 0.90, 0.90]) }; // 1st passes, 2nd fails QA
+        if (path === 'PRODUCT/nitrogendioxide_tropospheric_column') {
+          return { value: new Float32Array([40e-6, 100e-6, 50e-6, 10e-6]) };
+        }
+        throw new Error(`Unexpected path: ${path}`);
+      }
+      close() {}
+    }
+  };
+
+  const griddedRes = await AQ.gridS5pNetCdfBuffer(new ArrayBuffer(32), 'no2', [12.0, 41.0, 13.0, 42.0], 10, 10);
+  assert(griddedRes.grid instanceof Float32Array, 'gridded.grid must be Float32Array');
+  assert(griddedRes.indexGrid instanceof Float32Array, 'gridded.indexGrid must be Float32Array');
+  assert.strictEqual(griddedRes.grid, griddedRes.indexGrid, 'gridded.grid and indexGrid should reference same array');
+  assert.strictEqual(griddedRes.width, 10);
+  assert.strictEqual(griddedRes.height, 10);
+  assert.strictEqual(griddedRes.matchedFootprints, 1, 'Only 1 footprint should pass both QA and AOI bounds');
+  assert(griddedRes.validCells > 0, 'Splatting should populate valid cells');
+  // Scaled val: 40e-6 * 1e6 = 40.0 µmol/m²
+  assert(Math.abs(griddedRes.mean - 40.0) < 1e-2, `Expected mean ~40.0, got ${griddedRes.mean}`);
+  assert.strictEqual(mockUnlinks.length, 1, 'Temporary NetCDF file must be unlinked');
+  console.log('✓ Sentinel-5P NetCDF mock gridding verified.');
+
+  console.log('--- 11. Testing Sentinel-2 AQ Series (loadSentinel2AqSeries) ---');
+  const mockReader = {
+    searchSentinel2Stac: async () => [
+      {
+        id: 's2_20230810_tileA',
+        properties: { datetime: '2023-08-10T10:00:00Z', 'eo:cloud_cover': 20 },
+        assets: {
+          B01: { href: 'https://cdn/b01.tif' },
+          B02: { href: 'https://cdn/b02.tif' },
+          scl: { href: 'https://cdn/scl.tif' }
+        }
+      },
+      {
+        id: 's2_20230810_tileB_cloudier',
+        properties: { datetime: '2023-08-10T10:05:00Z', 'eo:cloud_cover': 55 },
+        assets: {
+          coastal: { href: 'https://cdn/b01.tif' },
+          blue: { href: 'https://cdn/b02.tif' },
+          scl: { href: 'https://cdn/scl.tif' }
+        }
+      },
+      {
+        id: 's2_20230815_tileC',
+        properties: { datetime: '2023-08-15T10:00:00Z', 'eo:cloud_cover': 5 },
+        assets: {
+          coastal: { href: 'https://cdn/b01.tif' },
+          blue: { href: 'https://cdn/b02.tif' }
+        }
+      }
+    ],
+    readCogBandToGrid: async (asset, item, bbox, w, h) => {
+      const g = new Float32Array(w * h);
+      g.fill(asset.href.includes('b01') ? 0.3 : 0.1);
+      return g;
+    },
+    readCogSclMask: async (item, bbox, w, h) => {
+      if (!item?.assets?.scl) return null;
+      const m = new Uint8Array(w * h);
+      m[0] = 1; // Mask first cell
+      return m;
+    }
+  };
+  globalThis.SentiStacCogReader = mockReader;
+
+  const s2Frames = await AQ.loadSentinel2AqSeries([10, 40, 11, 41], 'asi', '2023-08-01', '2023-08-20', {
+    width: 4,
+    height: 4,
+    maskClouds: true
+  });
+  assert.strictEqual(s2Frames.length, 2, 'Date deduplication should keep lowest cloud tile per UTC day');
+  assert.strictEqual(s2Frames[0].dateStr, '2023-08-10');
+  assert.strictEqual(s2Frames[1].dateStr, '2023-08-15');
+  assert.strictEqual(s2Frames[0].id, 's2_20230810_tileA');
+  assert(s2Frames[0].grid instanceof Float32Array, 'Frame grid must be Float32Array');
+  assert(s2Frames[0].indexGrid instanceof Float32Array, 'Frame indexGrid must be Float32Array');
+  assert.strictEqual(s2Frames[0].sensor, 's2');
+  assert.strictEqual(s2Frames[0].mode, 'asi');
+  assert(Number.isNaN(s2Frames[0].grid[0]), 'Masked pixel 0 should be NaN');
+  // (0.3 - 0.1) / (0.3 + 0.1) = 0.5
+  assert(Math.abs(s2Frames[0].grid[1] - 0.5) < 1e-4, 'Unmasked cell 1 should be 0.5');
+
+  // Test alias mapping (e.g. 'aot' -> 's2_aot', 'pm25' -> 'pm25_proxy')
+  mockReader.searchSentinel2Stac = async () => [
+    {
+      id: 's2_aot_item',
+      properties: { datetime: '2023-08-01T10:00:00Z', 'eo:cloud_cover': 0 },
+      assets: { AOT: { href: 'https://cdn/aot.tif' } }
+    }
+  ];
+  mockReader.readCogBandToGrid = async (asset, item, bbox, w, h) => {
+    const g = new Float32Array(w * h);
+    g.fill(0.18);
+    return g;
+  };
+  const aotFrames = await AQ.loadSentinel2AqSeries([10, 40, 11, 41], 'aot', '2023-08-01', '2023-08-02', { width: 2, height: 2 });
+  assert.strictEqual(aotFrames.length, 1);
+  assert.strictEqual(aotFrames[0].mode, 's2_aot', 'Alias "aot" should resolve to mode "s2_aot"');
+  assert(Math.abs(aotFrames[0].grid[0] - 0.18) < 1e-5, 'AOT grid[0] should be ~0.18');
+  console.log('✓ Sentinel-2 AQ series loading, alias resolution, and deduplication verified.');
+
+  console.log('--- 12. Testing Sentinel-5P Series (loadSentinel5pSeries) ---');
+  globalThis.fetch = async function (url, opts = {}) {
+    if (url.includes('stac/v1/search')) {
+      return {
+        ok: true,
+        json: async () => ({
+          features: [
+            {
+              id: 's5p_f1',
+              properties: { datetime: '2023-08-05T12:00:00Z' },
+              assets: { no2: { href: 'https://blob/1.nc' } }
+            },
+            {
+              id: 's5p_f2',
+              properties: { datetime: '2023-08-01T12:00:00Z' },
+              assets: { no2: { href: 'https://blob/2.nc' } }
+            },
+            {
+              id: 's5p_f3',
+              properties: { datetime: '2023-08-03T12:00:00Z' },
+              assets: { no2: { href: 'https://blob/3.nc' } }
+            }
+          ]
+        })
+      };
+    }
+    if (url.includes('api/sas/v1/sign')) {
+      return { ok: true, json: async () => ({ href: 'https://blob/signed.nc' }) };
+    }
+    if (url.includes('.nc')) {
+      return { ok: true, arrayBuffer: async () => new ArrayBuffer(16) };
+    }
+    return origFetch.apply(this, arguments);
+  };
+
+  const s5pFrames = await AQ.loadSentinel5pSeries([12, 41, 13, 42], 'no2', '2023-08-01', '2023-08-06', {
+    maxScenes: 2,
+    width: 5,
+    height: 5
+  });
+  // 3 features subsampled down to 2
+  assert.strictEqual(s5pFrames.length, 2, 'Subsampling should limit frames to maxScenes');
+  // Chronological ascending check: 2023-08-01 should come before 2023-08-05
+  assert.strictEqual(s5pFrames[0].dateStr, '2023-08-01');
+  assert.strictEqual(s5pFrames[1].dateStr, '2023-08-05');
+  assert.strictEqual(s5pFrames[0].sensor, 's5p');
+  assert.strictEqual(s5pFrames[0].shortLabel, 'NO₂');
+  assert(s5pFrames[0].grid instanceof Float32Array);
+  assert(s5pFrames[0].indexGrid instanceof Float32Array);
+  console.log('✓ Sentinel-5P series subsampling and chronological ordering verified.');
+
+  console.log('--- 13. Testing Multi-Sensor Grid Correlation (correlateGrids) ---');
+  // Perfectly correlated grids: Y = 2 * X + 1
+  const gA = new Float32Array([1, 2, 3, 4, 5]);
+  const gB = new Float32Array([3, 5, 7, 9, 11]);
+  const corrPerf = AQ.correlateGrids(gA, gB);
+  assert.strictEqual(corrPerf.count, 5);
+  assert(Math.abs(corrPerf.pearsonR - 1.0) < 1e-4, `Expected r=1.0, got ${corrPerf.pearsonR}`);
+  assert(Math.abs(corrPerf.rSquared - 1.0) < 1e-4, `Expected R^2=1.0, got ${corrPerf.rSquared}`);
+  assert(Math.abs(corrPerf.slope - 2.0) < 1e-4, `Expected slope=2.0, got ${corrPerf.slope}`);
+  assert(Math.abs(corrPerf.intercept - 1.0) < 1e-4, `Expected intercept=1.0, got ${corrPerf.intercept}`);
+  assert.strictEqual(corrPerf.scatterPoints.length, 5);
+
+  // Low degrees-of-freedom guard: count < 3 returns NaN for pearsonR
+  const gA_tiny = new Float32Array([1, 2]);
+  const gB_tiny = new Float32Array([2, 4]);
+  const corrTiny = AQ.correlateGrids(gA_tiny, gB_tiny);
+  assert.strictEqual(corrTiny.count, 2);
+  assert(Number.isNaN(corrTiny.pearsonR), 'N < 3 should return NaN for pearsonR');
+
+  // Different length grids with NaN handling (auto-resampling)
+  const gA_long = new Float32Array([1, 2, NaN, 4, 5, 6, 7, 8]);
+  const gB_short = new Float32Array([2, 4, 6, 8]);
+  const corrDiff = AQ.correlateGrids(gA_long, gB_short);
+  assert(corrDiff.count >= 3);
+  assert(Number.isFinite(corrDiff.pearsonR), 'Resampled correlation should produce finite pearsonR');
+  console.log('✓ Multi-sensor grid correlation analysis verified.');
+
+  console.log('--- 14. Testing In-Situ Ground Monitors (fetchOpenAqStations) ---');
+  globalThis.fetch = async function (url, opts = {}) {
+    if (url.includes('api.openaq.org')) {
+      return {
+        ok: true,
+        json: async () => ({
+          results: [
+            {
+              id: 'aq_station_01',
+              location: 'Downtown Air Quality Monitor',
+              city: 'Metropolis',
+              country: 'NZ',
+              coordinates: { latitude: -40.35, longitude: 175.61 },
+              measurements: [
+                { parameter: 'pm25', value: 8.5, unit: 'µg/m³', lastUpdated: '2023-08-15T12:00:00Z' }
+              ]
+            },
+            {
+              id: 'aq_station_02_invalid',
+              coordinates: null
+            }
+          ]
+        })
+      };
+    }
+    return origFetch.apply(this, arguments);
+  };
+
+  const stations = await AQ.fetchOpenAqStations([175.5, -40.4, 175.7, -40.3], { parameter: 'pm25' });
+  assert.strictEqual(stations.length, 1, 'Should filter out stations without valid coordinates');
+  assert.strictEqual(stations[0].id, 'aq_station_01');
+  assert.strictEqual(stations[0].parameter, 'pm25');
+  assert.strictEqual(stations[0].value, 8.5);
+  assert.strictEqual(stations[0].unit, 'µg/m³');
+  console.log('✓ OpenAQ ground monitoring integration verified.');
+
+  console.log('--- 15. Testing Web Worker NetCDF Gridding ---');
+  const workerGridded = await AQ.gridS5pNetCdfBufferInWorker(new ArrayBuffer(32), 'no2', [12.0, 41.0, 13.0, 42.0], 10, 10);
+  assert(workerGridded.grid instanceof Float32Array);
+  assert.strictEqual(workerGridded.matchedFootprints, 1);
+  console.log('✓ Web Worker NetCDF gridding with graceful fallback verified.');
+
   console.log('\n========================================');
   console.log('All air quality tests passed successfully!');
   console.log('========================================');
@@ -257,3 +567,4 @@ testWorkerAndLegend().catch(err => {
   console.error('Test failed:', err);
   process.exit(1);
 });
+

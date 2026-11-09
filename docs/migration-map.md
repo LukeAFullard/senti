@@ -20,6 +20,8 @@ This map records the current extraction boundaries and the intended next destina
 | GeoJSON, GeoTIFF, reproducibility report, HTML escaping/download helper, OPTRAM diagnostics | `js/08-reports-and-geospatial-exports.js` | `export/geospatial.js`, `export/report.js`, `core/utils.js`, `features/optram.js` |
 | Seasonal DOY window, numeric-grid resampling, anomaly baseline/score/overlay/export | `js/09-seasonal-anomaly-and-radar-discovery.js` | `analysis/anomalies.js` for pure calculations and `features/seasonal-anomalies.js` for UI/map/export |
 | Sentinel-1 STAC search, asset signing, remote/local RTC reads, radar display and optical/radar comparison | `js/09-seasonal-anomaly-and-radar-discovery.js`, `js/10-radar-rendering-and-comparison.js` | `data/sentinel1.js`, `analysis/radar-analysis.js`, `features/radar-comparison.js`; keep optional and isolate provider auth/CORS limitations |
+| Air quality optical proxy indices (ASI, NGAI, SPDI, CDI), Sen2Cor DDV fallback diagnostics, S5P TROPOMI trace gas gridding (NO₂, SO₂, CO, O₃, CH₄, HCHO, UVAI), unit conversion, and host app wrapping | `js/11-air-quality-module.js` | `features/air-quality.js`, `data/sentinel5p.js`, `analysis/atmospheric.js` |
+| Standalone public air quality observatory application controller logic | `js/apps/aq-dashboard-app.js` | `apps/aq-observatory.js` |
 
 ## Key contracts to define before further extraction
 
@@ -31,7 +33,9 @@ This map records the current extraction boundaries and the intended next destina
 
 ## What was actually verified in this pass
 
-- All ten extracted JavaScript files pass `node --check`.
-- The extracted script bodies, when concatenated in the declared order, match the original inline JavaScript body; only file headers and additional per-script strict-mode directives were added.
-- `index.html` references all ten files in order.
-- A live Chromium smoke test could not be completed in this execution environment because navigation to the local HTTP server was blocked by the environment (`ERR_BLOCKED_BY_ADMINISTRATOR`). Do not treat the refactor as browser-regression-tested yet.
+- All JavaScript files pass `node --check`.
+- The pure core libraries `js/core/00-toolkit-core.js` and `js/core/00-stac-and-cog-reader.js` pass automated unit tests in `tests/test_toolkit_core.js` (7/7 tests passed) and `tests/test_stac_and_cog_reader.js` (7/7 tests passed).
+- The air quality module `js/11-air-quality-module.js` passes all 12 automated test suites in `tests/test_air_quality.js` including pixel metrics, grid calculation with masking, Sen2Cor DDV fallback diagnostics, trace gas unit conversion, color ramps, host app registration, Web Worker interception, live/mock STAC query formation, NetCDF swath gridding, and Sentinel-2 / Sentinel-5P time series loading and deduplication.
+- Simulated sequential script execution in classic order verified no unhandled globals or collisions.
+- HTML entries (`index.html`, `air-quality-dashboard.html`, `test-app.html`) load modules in correct dependency order.
+

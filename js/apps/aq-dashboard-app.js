@@ -27,10 +27,15 @@
   let isProbing = false;
 
   let loadedFrames = [];
+  let loadedS2Frames = [];
+  let loadedS5pFrames = [];
   let periodMedianGrid = null;
   let activeDisplayGrid = null;
   let activeBbox = PRESETS.palmerston.bbox.slice();
   let chartInstance = null;
+  let activeChartMode = 'timeline';
+  let openAqLayerGroup = null;
+  let openAqVisible = false;
 
   // DOM
   const el = id => document.getElementById(id);
@@ -110,6 +115,15 @@
     el('aqStartDate').value = start.toISOString().slice(0, 10);
 
     presetSel.addEventListener('change', () => {
+      if (presetSel.value === 'custom') {
+        if (map) {
+          const b = map.getBounds();
+          activeBbox = [b.getWest(), b.getSouth(), b.getEast(), b.getNorth()];
+          updateBboxRectangle(activeBbox);
+          log(`Custom Area set to map view: [${activeBbox.map(v => v.toFixed(3)).join(', ')}]`);
+        }
+        return;
+      }
       const p = PRESETS[presetSel.value];
       if (p) {
         activeBbox = p.bbox.slice();
@@ -119,6 +133,16 @@
         log(`Selected preset: ${p.name}`);
       }
     });
+
+    if (map) {
+      map.on('moveend', () => {
+        if (presetSel.value === 'custom') {
+          const b = map.getBounds();
+          activeBbox = [b.getWest(), b.getSouth(), b.getEast(), b.getNorth()];
+          updateBboxRectangle(activeBbox);
+        }
+      });
+    }
 
     el('searchAndLoadBtn').addEventListener('click', handleSearchAndLoad);
     el('temporalViewMode').addEventListener('change', updateActiveDisplay);
@@ -150,6 +174,25 @@
     });
 
     el('loadLocalNcBtn').addEventListener('click', handleLoadLocalNc);
+
+    // In-situ ground stations
+    const openAqBtn = el('toggleOpenAqBtn');
+    if (openAqBtn) openAqBtn.addEventListener('click', toggleOpenAqLayer);
+
+    // Chart toggle buttons
+    const timelineBtn = el('showTimelineChartBtn');
+    if (timelineBtn) timelineBtn.addEventListener('click', () => {
+      activeChartMode = 'timeline';
+      el('chartTitle').textContent = 'Temporal Timeline';
+      updateChartWithActiveFrame();
+    });
+
+    const corrBtn = el('showCorrelationChartBtn');
+    if (corrBtn) corrBtn.addEventListener('click', () => {
+      activeChartMode = 'correlation';
+      el('chartTitle').textContent = 'Multi-Sensor Scatter Plot';
+      updateChartWithActiveFrame();
+    });
 
     // Export tools
     el('exportTiffBtn').addEventListener('click', handleExportTiff);
@@ -195,6 +238,11 @@
       }
 
       loadedFrames = frames;
+      if (sensor === 's2') {
+        loadedS2Frames = frames;
+      } else {
+        loadedS5pFrames = frames;
+      }
       log(`Successfully loaded ${frames.length} frames.`);
 
       // Compute Period Median Baseline
@@ -217,6 +265,11 @@
       const end = el('aqEndDate').value;
       const maxScenes = parseInt(el('maxScenesInput').value, 10) || 8;
       loadedFrames = generateSyntheticSeries(metric, sensor, start, end, maxScenes);
+      if (sensor === 's2') {
+        loadedS2Frames = loadedFrames;
+      } else {
+        loadedS5pFrames = loadedFrames;
+      }
       periodMedianGrid = SentiToolkitCore.compositeGrids(loadedFrames.map(f => f.grid), 'median');
       const slider = el('timeSlider');
       slider.min = 0;
@@ -275,6 +328,29 @@
     if (mode === 'single') {
       const idx = parseInt(el('timeSlider').value, 10);
       renderFrame(idx);
+      return;
+    }
+
+    if (mode === 'monthly') {
+      const monthGroups = new Map();
+      for (const f of loadedFrames) {
+        const ym = f.dateStr ? f.dateStr.slice(0, 7) : 'Unknown';
+        if (!monthGroups.has(ym)) monthGroups.set(ym, []);
+        monthGroups.get(ym).push(f.grid);
+      }
+      const grids = loadedFrames.map(f => f.grid);
+      let composite = SentiToolkitCore.compositeGrids(grids, stat);
+      if (diff && periodMedianGrid) {
+        const delta = new Float32Array(composite.length);
+        for (let i = 0; i < delta.length; i++) delta[i] = composite[i] - periodMedianGrid[i];
+        composite = delta;
+      }
+      activeDisplayGrid = composite;
+      const numMonths = monthGroups.size;
+      const label = `Monthly ${stat.toUpperCase()} (${numMonths} month${numMonths === 1 ? '' : 's'})`;
+      displayGridOnMap(composite, label, diff);
+      updateKpisAndLegend(composite, label, diff);
+      updateChartWithActiveFrame();
       return;
     }
 
@@ -435,6 +511,11 @@
     if (typeof Chart === 'undefined') return;
     const ctx = el('aqChart').getContext('2d');
 
+    if (activeChartMode === 'correlation') {
+      renderCorrelationScatterChart(ctx);
+      return;
+    }
+
     // If transect is defined, plot transect line; else plot series means
     if (transectPoints.length >= 2 && activeDisplayGrid) {
       const transect = SentiToolkitCore.buildTransectPoints(transectPoints, 50);
@@ -493,6 +574,151 @@
     });
   }
 
+  function renderCorrelationScatterChart(ctx) {
+    if (!loadedS2Frames.length || !loadedS5pFrames.length) {
+      log('Multi-Sensor Analysis: Please search and load both Sentinel-2 and Sentinel-5P series to correlate optical proxies with trace gases.');
+      activeChartMode = 'timeline';
+      const titleEl = el('chartTitle');
+      if (titleEl) titleEl.textContent = 'Temporal Timeline (Load S2 & S5P for Scatter)';
+      updateChartWithActiveFrame();
+      return;
+    }
+
+    const s2 = loadedS2Frames[0];
+    const s5p = loadedS5pFrames[0];
+    const corr = AirQualityRemoteSensing.correlateGrids(s2.grid, s5p.grid);
+
+    if (chartInstance) chartInstance.destroy();
+    const trendline = [];
+    if (Number.isFinite(corr.minA) && Number.isFinite(corr.maxA) && Number.isFinite(corr.slope)) {
+      trendline.push(
+        { x: corr.minA, y: corr.slope * corr.minA + corr.intercept },
+        { x: corr.maxA, y: corr.slope * corr.maxA + corr.intercept }
+      );
+    }
+
+    chartInstance = new Chart(ctx, {
+      type: 'scatter',
+      data: {
+        datasets: [
+          {
+            label: `${s2.shortLabel} vs ${s5p.shortLabel} (r=${corr.pearsonR.toFixed(2)}, R²=${corr.rSquared.toFixed(2)})`,
+            data: corr.scatterPoints,
+            backgroundColor: 'rgba(96, 165, 250, 0.65)',
+            pointRadius: 3
+          },
+          {
+            type: 'line',
+            label: `Linear Fit: y = ${corr.slope.toFixed(3)}x + ${corr.intercept.toFixed(2)}`,
+            data: trendline,
+            borderColor: '#ef4444',
+            borderWidth: 2,
+            pointRadius: 0,
+            fill: false
+          }
+        ]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        scales: {
+          x: {
+            display: true,
+            title: { display: true, text: `${s2.shortLabel} (${s2.units})`, color: '#9ca3af' },
+            ticks: { color: '#9ca3af' }
+          },
+          y: {
+            display: true,
+            title: { display: true, text: `${s5p.shortLabel} (${s5p.units})`, color: '#9ca3af' },
+            ticks: { color: '#9ca3af' }
+          }
+        },
+        plugins: {
+          legend: { labels: { color: '#e2e5e9' } }
+        }
+      }
+    });
+
+    log(`Multi-Sensor Correlation (${s2.shortLabel} vs ${s5p.shortLabel}): Pearson r=${corr.pearsonR.toFixed(3)}, R²=${corr.rSquared.toFixed(3)}, N=${corr.count}`);
+  }
+
+  async function toggleOpenAqLayer() {
+    if (!map) return;
+    const btn = el('toggleOpenAqBtn');
+    if (openAqVisible) {
+      if (openAqLayerGroup) map.removeLayer(openAqLayerGroup);
+      openAqLayerGroup = null;
+      openAqVisible = false;
+      if (btn) {
+        btn.textContent = 'In-Situ Monitors (OpenAQ)';
+        btn.classList.add('btn-secondary');
+      }
+      log('Hidden in-situ ground monitoring stations.');
+      return;
+    }
+
+    try {
+      log('Querying OpenAQ API for active ground stations in current bounding box...');
+      const stations = await AirQualityRemoteSensing.fetchOpenAqStations(activeBbox);
+      if (!stations.length) {
+        log('No active OpenAQ stations found within current bounding box.');
+        return;
+      }
+      openAqLayerGroup = L.layerGroup();
+      for (const st of stations) {
+        let color = '#10b981'; // Good
+        if (st.parameter === 'pm25') {
+          if (st.value > 55) color = '#ef4444';
+          else if (st.value > 35) color = '#f97316';
+          else if (st.value > 12) color = '#f59e0b';
+        } else if (st.parameter === 'no2') {
+          if (st.value > 50) color = '#ef4444';
+          else if (st.value > 20) color = '#f59e0b';
+        }
+        const marker = L.circleMarker([st.lat, st.lon], {
+          radius: 7,
+          fillColor: color,
+          color: '#ffffff',
+          weight: 2,
+          opacity: 1,
+          fillOpacity: 0.85
+        });
+
+        let satValStr = '--';
+        if (activeDisplayGrid) {
+          const u = (st.lon - activeBbox[0]) / (activeBbox[2] - activeBbox[0]);
+          const v = (activeBbox[3] - st.lat) / (activeBbox[3] - activeBbox[1]);
+          const px = Math.floor(u * GRID_W);
+          const py = Math.floor(v * GRID_H);
+          if (px >= 0 && px < GRID_W && py >= 0 && py < GRID_H) {
+            const sv = activeDisplayGrid[py * GRID_W + px];
+            if (Number.isFinite(sv)) satValStr = sv.toFixed(2);
+          }
+        }
+
+        marker.bindPopup(`
+          <div style="font-size:12px; line-height:1.4; color:#111;">
+            <strong>${st.name}</strong><br>
+            <em>${st.city ? st.city + ', ' : ''}${st.country}</em><br>
+            <strong>Ground ${st.parameter.toUpperCase()}:</strong> ${st.value.toFixed(1)} ${st.unit}<br>
+            <strong>Satellite Pixel Value:</strong> ${satValStr}<br>
+            <span style="font-size:10px; color:#666;">Updated: ${st.lastUpdated ? st.lastUpdated.slice(0, 10) : 'Recent'}</span>
+          </div>
+        `);
+        marker.addTo(openAqLayerGroup);
+      }
+      openAqLayerGroup.addTo(map);
+      openAqVisible = true;
+      if (btn) {
+        btn.textContent = `Hide Ground Monitors (${stations.length})`;
+        btn.classList.remove('btn-secondary');
+      }
+      log(`Plotted ${stations.length} active OpenAQ ground stations with live validation popups.`);
+    } catch (err) {
+      log(`OpenAQ notice: ${err.message}`);
+    }
+  }
+
   function onMapMouseMove(e) {
     if (!activeDisplayGrid) return;
     const lat = e.latlng.lat, lon = e.latlng.lng;
@@ -540,7 +766,8 @@
         id: file.name,
         dateStr: new Date().toISOString().slice(0, 10),
         label: `Local NetCDF (${file.name})`,
-        grid: gridded.grid,
+        grid: gridded.grid || gridded.indexGrid,
+        indexGrid: gridded.indexGrid || gridded.grid,
         width: GRID_W,
         height: GRID_H,
         bbox: activeBbox.slice(),
